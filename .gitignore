@@ -1,0 +1,28 @@
+# Entorno virtual
+.venv/
+
+# Variables de entorno y secrets
+.env
+.env.local
+
+# Base de datos vectorial (generada por ingest.py)
+chroma_db/
+
+# Datos generados / archivos pesados
+data/audio/
+data/transcripts/*.json
+data/raw_videos/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
