@@ -1,56 +1,112 @@
-# Knowly — Chateá con tus clases universitarias
+# Knowly — Chatea con tus clases universitarias
 
-Sistema RAG que permite hacer preguntas en lenguaje natural sobre clases de Khan Academy, con referencias al minuto exacto.
+Sistema RAG que permite hacer preguntas en lenguaje natural sobre clases universitarias de YouTube, con referencias al minuto exacto del video.
 
-## 1. Instalación
+## Stack
+
+- **Backend:** FastAPI, ChromaDB, OpenAI (embeddings), Anthropic Claude (LLM), Whisper (transcripcion)
+- **Frontend:** Next.js 14, TypeScript, Tailwind CSS
+- **Ingesta:** yt-dlp (audio) + Whisper (transcripcion) + OpenAI embeddings + ChromaDB
+
+## Quickstart con Docker
 
 ```bash
+# 1. Configurar variables de entorno
+cp .env.example .env
+# Editar .env con tus API keys
+
+# 2. Levantar todo
+docker-compose up --build
+```
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- Docs API: http://localhost:8000/docs
+
+## Setup local (desarrollo)
+
+### Backend
+
+```bash
+cd backend
 python -m venv .venv
 source .venv/bin/activate  # Linux/Mac
 # .venv\Scripts\activate   # Windows
 
 pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 ```
 
-## 2. Configurar .env
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Abrir http://localhost:3000
+
+## Configurar .env
 
 ```bash
 cp .env.example .env
 ```
 
-Editá `.env` con tus API keys:
+Editar `.env` con tus API keys:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 ```
 
-## 3. Indexar una clase
+## API Endpoints
 
-Los videos de Khan Academy están alojados en YouTube. Para indexar una clase:
+### Clases
+- `GET /classes` — lista todas las clases indexadas
+- `DELETE /classes/{class_id}` — elimina una clase y sus chunks
 
-1. Abrí el video en Khan Academy
-2. Copiá la URL de YouTube del reproductor embebido (click derecho → "Copiar URL del video")
-3. Ejecutá:
+### Ingesta
+- `POST /ingest` — inicia pipeline de ingesta `{ url, title, class_id }` → `{ job_id }`
+- `GET /ingest/{job_id}` — estado del job: pending, downloading, transcribing, embedding, done, error
+
+### Chat
+- `POST /chat` — pregunta con RAG `{ query, class_id? }` → `{ answer, sources }`
+- `POST /chat/stream` — igual pero con streaming SSE
+
+## CLI (legacy)
+
+El CLI original sigue funcionando:
 
 ```bash
-python ingest.py --url "https://www.youtube.com/watch?v=CJyxxrl2JJg" --title "Álgebra - Variables" --class_id "algebra_01"
-```
+# Indexar
+python ingest.py --url "https://www.youtube.com/watch?v=..." --title "Clase" --class_id "clase_01"
 
-> **Nota:** Los videos de Khan Academy deben ser públicos. Usá la URL de YouTube directamente ya que el extractor de Khan Academy de yt-dlp puede no estar actualizado.
-
-Esto descarga el audio, lo transcribe con Whisper, genera chunks con timestamps, y los guarda en ChromaDB. Los links de timestamp apuntan directamente al minuto en YouTube.
-
-## 4. Chatear
-
-```bash
+# Chatear
 python chat.py
 ```
 
-## 5. Ejemplos de preguntas
+## Estructura del proyecto
 
-- "¿Qué es una variable según la clase?"
-- "¿En qué minuto se explican las ecuaciones?"
-- "Explicame el concepto de álgebra según la clase"
-- "¿Cuáles fueron los ejemplos que dio el profesor?"
-- "¿Qué temas se vieron en la clase de álgebra?"
+```
+├── backend/
+│   ├── main.py              # FastAPI app
+│   ├── config.py            # Settings (pydantic-settings)
+│   ├── schemas.py           # Pydantic models
+│   ├── routers/
+│   │   ├── classes.py       # CRUD clases
+│   │   ├── ingest.py        # Pipeline de ingesta
+│   │   └── chat.py          # Chat + streaming
+│   └── services/
+│       ├── ingest_service.py  # Logica de ingesta
+│       └── rag_service.py     # RAG + Claude
+├── frontend/
+│   └── src/
+│       ├── app/             # Next.js App Router
+│       ├── components/      # React components
+│       └── lib/api.ts       # API client
+├── docker-compose.yml
+├── ingest.py                # CLI original
+├── rag.py                   # RAG original
+└── chat.py                  # Chat CLI original
+```
