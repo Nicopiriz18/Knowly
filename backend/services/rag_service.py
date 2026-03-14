@@ -138,7 +138,8 @@ def query_rag_stream(
         messages=[{"role": "user", "content": query}],
     ) as stream:
         for text in stream.text_stream:
-            yield f"data: {text}\n\n"
+            # JSON-encode each token to safely handle newlines/special chars
+            yield f"data: {json.dumps(text, ensure_ascii=False)}\n\n"
 
     # Send sources at the end
     sources_dicts = [s.model_dump() for s in sources]

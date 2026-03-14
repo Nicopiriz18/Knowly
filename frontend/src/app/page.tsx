@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { ClassInfo, Source, getClasses, API } from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
 import ChatMessage from "@/components/ChatMessage";
-import { Send, Loader2, GraduationCap } from "lucide-react";
+import { Send, GraduationCap } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -18,6 +18,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchClasses = useCallback(async () => {
@@ -67,49 +68,82 @@ export default function Home() {
       const decoder = new TextDecoder();
       let assistantText = "";
       let sources: Source[] = [];
+      let sseBuffer = "";
+      let renderPending = false;
 
       // Add empty assistant message
+      setIsStreaming(true);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "", sources: [] },
       ]);
 
+      const flushToUI = () => {
+        renderPending = false;
+        const updatedContent = assistantText;
+        const updatedSources = [...sources];
+        setMessages((prev) => {
+          const copy = [...prev];
+          copy[copy.length - 1] = {
+            role: "assistant",
+            content: updatedContent,
+            sources: updatedSources.length > 0 ? updatedSources : undefined,
+          };
+          return copy;
+        });
+      };
+
+      const scheduleRender = () => {
+        if (!renderPending) {
+          renderPending = true;
+          requestAnimationFrame(flushToUI);
+        }
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split("\n")) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data.startsWith("[SOURCES]")) {
-              try {
-                sources = JSON.parse(data.slice(9));
-              } catch {
-                // ignore parse errors
-              }
-            } else if (data === "[DONE]") {
-              // Stream complete
-            } else {
+        // Append decoded chunk to SSE buffer
+        sseBuffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events (separated by double newline)
+        const events = sseBuffer.split("\n\n");
+        // Keep the last (potentially incomplete) part in the buffer
+        sseBuffer = events.pop() || "";
+
+        for (const event of events) {
+          const line = event.trim();
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6);
+
+          if (data.startsWith("[SOURCES]")) {
+            try {
+              sources = JSON.parse(data.slice(9));
+            } catch {
+              // ignore parse errors
+            }
+          } else if (data === "[DONE]") {
+            // Stream complete
+          } else {
+            // Decode JSON-encoded token
+            try {
+              assistantText += JSON.parse(data);
+            } catch {
+              // Fallback: use raw text if not JSON
               assistantText += data;
             }
-
-            // Update last message
-            const updatedContent = assistantText;
-            const updatedSources = [...sources];
-            setMessages((prev) => {
-              const copy = [...prev];
-              copy[copy.length - 1] = {
-                role: "assistant",
-                content: updatedContent,
-                sources: updatedSources.length > 0 ? updatedSources : undefined,
-              };
-              return copy;
-            });
           }
         }
+
+        scheduleRender();
       }
+
+      // Final flush to ensure all content is rendered
+      flushToUI();
+      setIsStreaming(false);
     } catch {
+      setIsStreaming(false);
       // Fallback: try non-streaming endpoint
       try {
         const res = await fetch(`${API}/chat`, {
@@ -201,13 +235,18 @@ export default function Home() {
                   role={msg.role}
                   content={msg.content}
                   sources={msg.sources}
+                  isStreaming={isStreaming && idx === messages.length - 1 && msg.role === "assistant"}
                 />
               ))}
               {loading &&
                 messages[messages.length - 1]?.role === "user" && (
-                  <div className="flex justify-start mb-4">
-                    <div className="bg-gray-800 border border-gray-700 rounded-2xl rounded-bl-md px-4 py-3">
-                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                  <div className="flex items-start gap-3 mb-6">
+                    <div className="w-7 h-7 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center shrink-0">
+                      <div className="flex gap-1">
+                        <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                      </div>
                     </div>
                   </div>
                 )}
