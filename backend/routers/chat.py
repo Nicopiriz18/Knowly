@@ -10,14 +10,14 @@ router = APIRouter()
 
 
 @router.post("", response_model=ChatResponse)
-def chat(request: ChatRequest):
+async def chat(request: ChatRequest):
     """Answer a question using RAG over indexed classes."""
-    answer_text, sources = query_rag(request.query, class_id=request.class_id)
+    answer_text, sources = await query_rag(request.query, class_id=request.class_id)
     return ChatResponse(answer=answer_text, sources=sources)
 
 
 @router.post("/stream")
-def chat_stream(request: ChatRequest):
+async def chat_stream(request: ChatRequest):
     """Stream an answer using RAG with Server-Sent Events."""
     return StreamingResponse(
         query_rag_stream(request.query, class_id=request.class_id),
