@@ -3,10 +3,40 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+# ---------------------------------------------------------------------------
+# Materias
+# ---------------------------------------------------------------------------
+
+class CreateMateriaRequest(BaseModel):
+    title: str
+
+
+class MateriaInfo(BaseModel):
+    materia_id: str
+    title: str
+    class_count: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Classes
+# ---------------------------------------------------------------------------
+
+class ClassInfo(BaseModel):
+    class_id: str
+    class_title: str
+    source_url: str
+    chunk_count: int
+    materia_id: str
+
+
+# ---------------------------------------------------------------------------
+# Ingest
+# ---------------------------------------------------------------------------
+
 class IngestRequest(BaseModel):
     url: str
     title: str
-    class_id: str
+    materia_id: str
 
 
 class IngestResponse(BaseModel):
@@ -19,16 +49,14 @@ class IngestStatus(BaseModel):
     progress: int = 0
 
 
-class ClassInfo(BaseModel):
-    class_id: str
-    class_title: str
-    source_url: str
-    chunk_count: int
-
+# ---------------------------------------------------------------------------
+# Chat
+# ---------------------------------------------------------------------------
 
 class ChatRequest(BaseModel):
     query: str
     class_id: str | None = None
+    materia_id: str | None = None
 
 
 class Source(BaseModel):

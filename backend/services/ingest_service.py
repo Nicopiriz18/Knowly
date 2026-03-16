@@ -96,6 +96,7 @@ def _build_chunks(
     class_title: str,
     source_url: str,
     video_id: str,
+    materia_id: str = "",
 ) -> list[dict]:
     """Group segments into ~3-minute chunks."""
     chunks: list[dict] = []
@@ -113,6 +114,7 @@ def _build_chunks(
                     "class_id": class_id,
                     "class_title": class_title,
                     "source_url": source_url,
+                    "materia_id": materia_id,
                     "start_time": start_int,
                     "end_time": int(chunk_end),
                     "text": " ".join(current_texts),
@@ -130,6 +132,7 @@ def _build_chunks(
                 "class_id": class_id,
                 "class_title": class_title,
                 "source_url": source_url,
+                "materia_id": materia_id,
                 "start_time": start_int,
                 "end_time": int(segments[-1]["end"]),
                 "text": " ".join(current_texts),
@@ -160,6 +163,7 @@ def _embed_and_store(chunks: list[dict]) -> None:
             "class_id": c["class_id"],
             "class_title": c["class_title"],
             "source_url": c["source_url"],
+            "materia_id": c["materia_id"],
             "start_time": c["start_time"],
             "end_time": c["end_time"],
             "timestamp_link": c["timestamp_link"],
@@ -175,7 +179,7 @@ def _embed_and_store(chunks: list[dict]) -> None:
     )
 
 
-def run_ingest(job_id: str, url: str, title: str, class_id: str) -> None:
+def run_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str) -> None:
     """Run the full ingest pipeline, updating job status at each phase."""
     try:
         # Phase 1: Download
@@ -188,7 +192,7 @@ def run_ingest(job_id: str, url: str, title: str, class_id: str) -> None:
 
         # Phase 3: Embed and store
         jobs[job_id] = IngestStatus(status="embedding", message="Building chunks and generating embeddings...", progress=70)
-        chunks = _build_chunks(segments, class_id, title, url, video_id)
+        chunks = _build_chunks(segments, class_id, title, url, video_id, materia_id)
         _embed_and_store(chunks)
 
         # Done
@@ -198,8 +202,8 @@ def run_ingest(job_id: str, url: str, title: str, class_id: str) -> None:
         jobs[job_id] = IngestStatus(status="error", message=str(e), progress=0)
 
 
-def start_ingest(job_id: str, url: str, title: str, class_id: str) -> None:
+def start_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str) -> None:
     """Start the ingest pipeline in a background thread."""
     jobs[job_id] = IngestStatus(status="pending", message="Job queued.", progress=0)
-    thread = threading.Thread(target=run_ingest, args=(job_id, url, title, class_id), daemon=True)
+    thread = threading.Thread(target=run_ingest, args=(job_id, url, title, class_id, materia_id), daemon=True)
     thread.start()

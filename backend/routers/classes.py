@@ -1,5 +1,7 @@
 """Routes for managing indexed classes."""
 
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 import chromadb
 
@@ -10,16 +12,19 @@ router = APIRouter()
 
 
 @router.get("", response_model=list[ClassInfo])
-def list_classes():
-    """List all indexed classes with their chunk counts."""
+def list_classes(materia_id: str | None = None):
+    """List all indexed classes with their chunk counts, optionally filtered by materia."""
     chroma = chromadb.PersistentClient(path=settings.chroma_dir)
     collection = chroma.get_or_create_collection("classes")
 
     if collection.count() == 0:
         return []
 
-    # Get all documents metadata
-    all_data = collection.get(include=["metadatas"])
+    get_params: dict = {"include": ["metadatas"]}
+    if materia_id is not None:
+        get_params["where"] = {"materia_id": materia_id}
+
+    all_data = collection.get(**get_params)
     metadatas = all_data["metadatas"]
 
     # Aggregate unique classes
@@ -32,6 +37,7 @@ def list_classes():
                 class_title=meta["class_title"],
                 source_url=meta["source_url"],
                 chunk_count=1,
+                materia_id=meta.get("materia_id", ""),
             )
         else:
             classes[cid].chunk_count += 1
@@ -55,5 +61,11 @@ def delete_class(class_id: str):
         raise HTTPException(status_code=404, detail=f"Class '{class_id}' not found.")
 
     collection.delete(ids=results["ids"])
+
+    # Remove audio and transcript files from disk
+    data_dir = Path(settings.data_dir)
+    for subdir in ("audio", "transcripts"):
+        for f in (data_dir / subdir).glob(f"{class_id}.*"):
+            f.unlink(missing_ok=True)
 
     return {"detail": f"Deleted {len(results['ids'])} chunks for class '{class_id}'."}

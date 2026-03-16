@@ -14,7 +14,8 @@ router = APIRouter()
 def create_ingest_job(request: IngestRequest):
     """Start a new ingest job in the background."""
     job_id = str(uuid4())
-    start_ingest(job_id, request.url, request.title, request.class_id)
+    class_id = str(uuid4())[:8]
+    start_ingest(job_id, request.url, request.title, class_id, request.materia_id)
     return IngestResponse(job_id=job_id)
 
 
