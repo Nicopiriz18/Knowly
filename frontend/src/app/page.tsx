@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { ClassInfo, Source, getClasses, API } from "@/lib/api";
+import {
+  ClassInfo,
+  MateriaInfo,
+  Source,
+  getClasses,
+  getMaterias,
+  API,
+} from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
 import ChatMessage from "@/components/ChatMessage";
 import { Send, GraduationCap } from "lucide-react";
@@ -13,36 +20,58 @@ interface Message {
 }
 
 export default function Home() {
+  const [materias, setMaterias] = useState<MateriaInfo[]>([]);
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const [selectedMateria, setSelectedMateria] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const fetchClasses = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const data = await getClasses();
-      setClasses(data);
+      const [m, c] = await Promise.all([getMaterias(), getClasses()]);
+      setMaterias(m);
+      setClasses(c);
     } catch {
       // API might not be running
     }
   }, []);
 
   useEffect(() => {
-    fetchClasses();
-  }, [fetchClasses]);
+    fetchData();
+  }, [fetchData]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const selectedClassName =
-    selectedClass === null
-      ? "Todas las clases"
-      : classes.find((c) => c.class_id === selectedClass)?.class_title ||
-        selectedClass;
+  const handleSelectClass = (
+    classId: string | null,
+    materiaId: string | null
+  ) => {
+    setSelectedClass(classId);
+    setSelectedMateria(materiaId);
+  };
+
+  // Determine header label
+  const headerLabel = (() => {
+    if (selectedClass) {
+      return (
+        classes.find((c) => c.class_id === selectedClass)?.class_title ||
+        selectedClass
+      );
+    }
+    if (selectedMateria) {
+      return (
+        materias.find((m) => m.materia_id === selectedMateria)?.title ||
+        selectedMateria
+      );
+    }
+    return "Todas las materias";
+  })();
 
   const sendMessage = async () => {
     const query = input.trim();
@@ -57,7 +86,11 @@ export default function Home() {
       const res = await fetch(`${API}/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, class_id: selectedClass }),
+        body: JSON.stringify({
+          query,
+          class_id: selectedClass,
+          materia_id: selectedClass ? null : selectedMateria,
+        }),
       });
 
       if (!res.ok) {
@@ -104,12 +137,9 @@ export default function Home() {
         const { done, value } = await reader.read();
         if (done) break;
 
-        // Append decoded chunk to SSE buffer
         sseBuffer += decoder.decode(value, { stream: true });
 
-        // Process complete SSE events (separated by double newline)
         const events = sseBuffer.split("\n\n");
-        // Keep the last (potentially incomplete) part in the buffer
         sseBuffer = events.pop() || "";
 
         for (const event of events) {
@@ -126,11 +156,9 @@ export default function Home() {
           } else if (data === "[DONE]") {
             // Stream complete
           } else {
-            // Decode JSON-encoded token
             try {
               assistantText += JSON.parse(data);
             } catch {
-              // Fallback: use raw text if not JSON
               assistantText += data;
             }
           }
@@ -139,21 +167,22 @@ export default function Home() {
         scheduleRender();
       }
 
-      // Final flush to ensure all content is rendered
       flushToUI();
       setIsStreaming(false);
     } catch {
       setIsStreaming(false);
-      // Fallback: try non-streaming endpoint
       try {
         const res = await fetch(`${API}/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, class_id: selectedClass }),
+          body: JSON.stringify({
+            query,
+            class_id: selectedClass,
+            materia_id: selectedClass ? null : selectedMateria,
+          }),
         });
         const data = await res.json();
         setMessages((prev) => {
-          // Remove empty assistant message if present
           const filtered = prev.filter(
             (m, i) =>
               !(i === prev.length - 1 && m.role === "assistant" && !m.content)
@@ -198,10 +227,12 @@ export default function Home() {
   return (
     <div className="flex h-screen">
       <Sidebar
+        materias={materias}
         classes={classes}
         selectedClass={selectedClass}
-        onSelectClass={setSelectedClass}
-        onRefresh={fetchClasses}
+        selectedMateria={selectedMateria}
+        onSelectClass={handleSelectClass}
+        onRefresh={fetchData}
       />
 
       {/* Chat area */}
@@ -209,7 +240,7 @@ export default function Home() {
         {/* Header */}
         <header className="h-14 border-b border-gray-800 flex items-center px-5 shrink-0 bg-gray-950">
           <h2 className="text-sm font-medium text-gray-300 truncate">
-            {selectedClassName}
+            {headerLabel}
           </h2>
         </header>
 
@@ -223,8 +254,8 @@ export default function Home() {
               </h3>
               <p className="text-sm text-gray-600 max-w-md">
                 Pregunta lo que quieras sobre tus clases universitarias.
-                Selecciona una clase en el panel izquierdo o pregunta sobre
-                todas.
+                Selecciona una materia o clase en el panel izquierdo o pregunta
+                sobre todas.
               </p>
             </div>
           ) : (
@@ -235,7 +266,11 @@ export default function Home() {
                   role={msg.role}
                   content={msg.content}
                   sources={msg.sources}
-                  isStreaming={isStreaming && idx === messages.length - 1 && msg.role === "assistant"}
+                  isStreaming={
+                    isStreaming &&
+                    idx === messages.length - 1 &&
+                    msg.role === "assistant"
+                  }
                 />
               ))}
               {loading &&
@@ -243,9 +278,18 @@ export default function Home() {
                   <div className="flex items-start gap-3 mb-6">
                     <div className="w-7 h-7 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center shrink-0">
                       <div className="flex gap-1">
-                        <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                        <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                        <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                        <span
+                          className="w-1 h-1 bg-gray-500 rounded-full animate-bounce"
+                          style={{ animationDelay: "0ms" }}
+                        />
+                        <span
+                          className="w-1 h-1 bg-gray-500 rounded-full animate-bounce"
+                          style={{ animationDelay: "150ms" }}
+                        />
+                        <span
+                          className="w-1 h-1 bg-gray-500 rounded-full animate-bounce"
+                          style={{ animationDelay: "300ms" }}
+                        />
                       </div>
                     </div>
                   </div>

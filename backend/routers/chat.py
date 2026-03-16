@@ -12,7 +12,9 @@ router = APIRouter()
 @router.post("", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """Answer a question using RAG over indexed classes."""
-    answer_text, sources = await query_rag(request.query, class_id=request.class_id)
+    answer_text, sources = await query_rag(
+        request.query, class_id=request.class_id, materia_id=request.materia_id
+    )
     return ChatResponse(answer=answer_text, sources=sources)
 
 
@@ -20,6 +22,6 @@ async def chat(request: ChatRequest):
 async def chat_stream(request: ChatRequest):
     """Stream an answer using RAG with Server-Sent Events."""
     return StreamingResponse(
-        query_rag_stream(request.query, class_id=request.class_id),
+        query_rag_stream(request.query, class_id=request.class_id, materia_id=request.materia_id),
         media_type="text/event-stream",
     )

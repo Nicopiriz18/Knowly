@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     data_dir: str = str(Path(__file__).resolve().parent.parent / "data")
     chunk_duration: int = 180
     whisper_model: str = "base"
+    # Adaptive retrieval settings for broad queries
+    broad_per_class_results: int = 10
+    broad_n_results: int = 10
+    broad_max_tokens: int = 4096
+    max_context_chars: int = 80000
 
     class Config:
         env_file = str(_env_file)

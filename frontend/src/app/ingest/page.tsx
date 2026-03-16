@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { ClassInfo, IngestStatus, getClasses, startIngest, getIngestStatus } from "@/lib/api";
+import {
+  ClassInfo,
+  MateriaInfo,
+  IngestStatus,
+  getClasses,
+  getMaterias,
+  createMateria,
+  startIngest,
+  getIngestStatus,
+} from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
 import {
   Download,
@@ -11,6 +20,7 @@ import {
   Loader2,
   AlertCircle,
   ArrowLeft,
+  Plus,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -27,13 +37,17 @@ function getStepIndex(status: string): number {
 }
 
 export default function IngestPage() {
+  const [materias, setMaterias] = useState<MateriaInfo[]>([]);
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const [selectedMateria, setSelectedMateria] = useState<string | null>(null);
 
   // Form
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
-  const [classId, setClassId] = useState("");
+  const [materiaId, setMateriaId] = useState("");
+  const [showNewMateria, setShowNewMateria] = useState(false);
+  const [newMateriaTitle, setNewMateriaTitle] = useState("");
 
   // Status
   const [jobId, setJobId] = useState<string | null>(null);
@@ -41,18 +55,19 @@ export default function IngestPage() {
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchClasses = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const data = await getClasses();
-      setClasses(data);
+      const [m, c] = await Promise.all([getMaterias(), getClasses()]);
+      setMaterias(m);
+      setClasses(c);
     } catch {
       // ignore
     }
   }, []);
 
   useEffect(() => {
-    fetchClasses();
-  }, [fetchClasses]);
+    fetchData();
+  }, [fetchData]);
 
   // Polling
   useEffect(() => {
@@ -65,7 +80,7 @@ export default function IngestPage() {
         if (s.status === "done" || s.status === "error") {
           setPolling(false);
           if (s.status === "error") setError(s.message);
-          if (s.status === "done") fetchClasses();
+          if (s.status === "done") fetchData();
         }
       } catch {
         setPolling(false);
@@ -74,22 +89,44 @@ export default function IngestPage() {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [jobId, polling, fetchClasses]);
+  }, [jobId, polling, fetchData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url || !title || !classId) return;
+    if (!url || !title) return;
 
     setError(null);
     setStatus(null);
 
     try {
-      const id = await startIngest(url, title, classId);
+      let finalMateriaId = materiaId;
+
+      // Create new materia if needed
+      if (showNewMateria) {
+        if (!newMateriaTitle) {
+          setError("Ingresa el nombre de la nueva materia.");
+          return;
+        }
+        const newMateria = await createMateria(newMateriaTitle);
+        finalMateriaId = newMateria.materia_id;
+        await fetchData();
+      }
+
+      if (!finalMateriaId) {
+        setError("Selecciona o crea una materia.");
+        return;
+      }
+
+      const id = await startIngest(url, title, finalMateriaId);
       setJobId(id);
       setPolling(true);
       setStatus({ status: "pending", message: "Iniciando...", progress: 0 });
-    } catch {
-      setError("Error al iniciar la indexacion. Verifica que el backend este corriendo.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Error al iniciar la indexacion. Verifica que el backend este corriendo."
+      );
     }
   };
 
@@ -98,10 +135,15 @@ export default function IngestPage() {
   return (
     <div className="flex h-screen">
       <Sidebar
+        materias={materias}
         classes={classes}
         selectedClass={selectedClass}
-        onSelectClass={setSelectedClass}
-        onRefresh={fetchClasses}
+        selectedMateria={selectedMateria}
+        onSelectClass={(cId, mId) => {
+          setSelectedClass(cId);
+          setSelectedMateria(mId);
+        }}
+        onRefresh={fetchData}
       />
 
       <main className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
@@ -123,6 +165,57 @@ export default function IngestPage() {
 
             {!jobId ? (
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Materia selection */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1.5">
+                    Materia
+                  </label>
+                  {!showNewMateria ? (
+                    <div className="space-y-2">
+                      <select
+                        value={materiaId}
+                        onChange={(e) => setMateriaId(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                      >
+                        <option value="">Seleccionar materia...</option>
+                        {materias.map((m) => (
+                          <option key={m.materia_id} value={m.materia_id}>
+                            {m.title}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewMateria(true)}
+                        className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Crear nueva materia
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={newMateriaTitle}
+                        onChange={(e) => setNewMateriaTitle(e.target.value)}
+                        placeholder="Ej: Calculo II"
+                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNewMateria(false);
+                          setNewMateriaTitle("");
+                        }}
+                        className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                      >
+                        Usar materia existente
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-sm text-gray-400 mb-1.5">
                     URL de YouTube
@@ -145,21 +238,7 @@ export default function IngestPage() {
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Ej: Calculo II - Clase 5"
-                    required
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1.5">
-                    ID de la clase
-                  </label>
-                  <input
-                    type="text"
-                    value={classId}
-                    onChange={(e) => setClassId(e.target.value)}
-                    placeholder="Ej: calculo-2-clase-5"
+                    placeholder="Ej: Clase 5 - Integrales"
                     required
                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                   />
