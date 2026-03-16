@@ -52,44 +52,36 @@ Knowly es un sistema RAG (Retrieval-Augmented Generation) que permite hacer preg
 
 ## Arquitectura
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         FRONTEND                                │
-│                    Next.js 14 + TypeScript                       │
-│                                                                 │
-│   ┌──────────┐    ┌──────────────┐    ┌──────────────────┐      │
-│   │ Sidebar  │    │ Chat (SSE)   │    │ Ingest + Status  │      │
-│   └──────────┘    └──────────────┘    └──────────────────┘      │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ HTTP / SSE
-┌────────────────────────────▼────────────────────────────────────┐
-│                         BACKEND                                 │
-│                    FastAPI + Uvicorn                             │
-│                                                                 │
-│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-│   │ /materias│  │ /classes │  │ /ingest  │  │ /chat        │   │
-│   └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────┬───────┘   │
-│        │              │             │               │           │
-│   ┌────▼──────────────▼─────┐ ┌─────▼─────┐  ┌─────▼────────┐  │
-│   │   materia_service.py    │ │  Ingest   │  │  RAG Service │  │
-│   │   (JSON storage)       │ │  Service  │  │  (LangGraph) │  │
-│   └─────────────────────────┘ └─────┬─────┘  └──────┬───────┘  │
-│                                     │               │           │
-└─────────────────────────────────────┼───────────────┼───────────┘
-                                      │               │
-            ┌─────────────────────────┼───────────────┼──────┐
-            │                         ▼               ▼      │
-            │  ┌──────────┐   ┌──────────┐   ┌───────────┐   │
-            │  │ yt-dlp   │   │ Whisper  │   │ ChromaDB  │   │
-            │  │ + ffmpeg │   │ (STT)    │   │ (Vectors) │   │
-            │  └──────────┘   └──────────┘   └───────────┘   │
-            │                                                 │
-            │  ┌──────────────────┐   ┌──────────────────┐    │
-            │  │ Claude (Vision   │   │ OpenAI Embeddings│    │
-            │  │  + Generation)   │   │ (text-emb-3-sm)  │    │
-            │  └──────────────────┘   └──────────────────┘    │
-            │               SERVICIOS EXTERNOS                │
-            └─────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Frontend["Frontend — Next.js 14 + TypeScript"]
+        Sidebar[Sidebar]
+        Chat[Chat SSE]
+        Ingest[Ingest + Status]
+    end
+
+    Frontend -->|HTTP / SSE| Backend
+
+    subgraph Backend["Backend — FastAPI + Uvicorn"]
+        R1[/materias]
+        R2[/classes]
+        R3[/ingest]
+        R4[/chat]
+        R1 & R2 --> MateriaService["materia_service.py\n(JSON storage)"]
+        R3 --> IngestService[Ingest Service]
+        R4 --> RAGService["RAG Service\n(LangGraph)"]
+    end
+
+    subgraph External["Servicios Externos"]
+        ytdlp["yt-dlp + ffmpeg"]
+        Whisper["Whisper (STT)"]
+        ChromaDB["ChromaDB (Vectors)"]
+        Claude["Claude\n(Vision + Generation)"]
+        OpenAIEmb["OpenAI Embeddings\n(text-emb-3-sm)"]
+    end
+
+    IngestService --> ytdlp & Whisper & OpenAIEmb & ChromaDB & Claude
+    RAGService --> ChromaDB & Claude
 ```
 
 ---
@@ -294,49 +286,17 @@ Descargando → Transcribiendo → Extrayendo frames → Analizando video → Ge
 
 El servicio de ingesta transforma un video de YouTube en chunks vectorizados listos para busqueda semantica:
 
-```
-   URL de YouTube
-        │
-        ▼
-  ┌─────────────┐
-  │  yt-dlp     │──── Descarga video (480p max) + audio
-  │  + ffmpeg   │
-  └──────┬──────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌────────┐ ┌──────────────┐
-│Whisper │ │ Extraccion   │
-│ (STT)  │ │ de frames    │
-│        │ │ (cada 30s)   │
-└───┬────┘ └──────┬───────┘
-    │             │
-    │        ┌────▼───────────┐
-    │        │ Deduplicacion  │
-    │        │ (hash percep.) │
-    │        └────┬───────────┘
-    │             │
-    │        ┌────▼───────────┐
-    │        │ Claude Vision  │
-    │        │ (Haiku 4.5)    │
-    │        └────┬───────────┘
-    │             │
-    ▼             ▼
-  ┌───────────────────┐
-  │   Merge: texto    │
-  │   + descripciones │
-  │   visuales        │
-  └─────────┬─────────┘
-            │
-     ┌──────▼──────┐
-     │  Chunking   │──── Segmentos de ~3 minutos con metadata
-     │  + Metadata │     (timestamps, links, materia_id)
-     └──────┬──────┘
-            │
-     ┌──────▼──────────┐
-     │ OpenAI Embeddings│
-     │ + ChromaDB       │──── Almacenamiento vectorial persistente
-     └─────────────────┘
+```mermaid
+graph TB
+    URL["URL de YouTube"] --> Download["yt-dlp + ffmpeg\nDescarga video (480p) + audio"]
+    Download --> Whisper["Whisper (STT)"]
+    Download --> Frames["Extraccion de frames\n(cada 30s)"]
+    Frames --> Dedup["Deduplicacion\n(hash perceptual)"]
+    Dedup --> Vision["Claude Vision\n(Haiku 4.5)"]
+    Whisper --> Merge["Merge: texto\n+ descripciones visuales"]
+    Vision --> Merge
+    Merge --> Chunking["Chunking + Metadata\nSegmentos de ~3 min con timestamps,\nlinks, materia_id"]
+    Chunking --> Store["OpenAI Embeddings + ChromaDB\nAlmacenamiento vectorial persistente"]
 ```
 
 ---
@@ -345,34 +305,16 @@ El servicio de ingesta transforma un video de YouTube en chunks vectorizados lis
 
 El servicio RAG utiliza **LangGraph** para orquestar un workflow agentico con 4 nodos:
 
-```
-        Query del usuario
-              │
-              ▼
-     ┌────────────────┐
-     │   CLASIFICAR   │──── Claude Haiku determina si la query
-     │                │     es "amplia" o "especifica"
-     └───────┬────────┘
-             │
-             ▼
-     ┌────────────────┐
-     │   RECUPERAR    │──── Busqueda semantica en ChromaDB
-     │                │     (adaptada al tipo de query)
-     │                │     Amplia: 10 resultados, mas contexto
-     │                │     Especifica: 4 resultados, mas precision
-     └───────┬────────┘
-             │
-             ▼
-     ┌────────────────┐
-     │   EVALUAR      │──── Claude Haiku filtra fragmentos
-     │   DOCUMENTOS   │     irrelevantes (solo queries especificas)
-     └───────┬────────┘
-             │
-             ▼
-     ┌────────────────┐
-     │   GENERAR      │──── Claude Sonnet 4 genera la respuesta
-     │   RESPUESTA    │     con citas, timestamps y links
-     └────────────────┘
+```mermaid
+graph TB
+    Query["Query del usuario"] --> Classify
+    Classify["CLASIFICAR\nClaude Haiku determina si la query\nes 'amplia' o 'especifica'"]
+    Classify --> Retrieve
+    Retrieve["RECUPERAR\nBusqueda semantica en ChromaDB\nAmplia: 10 resultados, mas contexto\nEspecifica: 4 resultados, mas precision"]
+    Retrieve --> Evaluate
+    Evaluate["EVALUAR DOCUMENTOS\nClaude Haiku filtra fragmentos\nirrelevantes (solo queries especificas)"]
+    Evaluate --> Generate
+    Generate["GENERAR RESPUESTA\nClaude Sonnet 4 genera la respuesta\ncon citas, timestamps y links"]
 ```
 
 ---
