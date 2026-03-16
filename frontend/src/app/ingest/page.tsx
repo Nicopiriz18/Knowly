@@ -21,12 +21,16 @@ import {
   AlertCircle,
   ArrowLeft,
   Plus,
+  Video,
+  Eye,
 } from "lucide-react";
 import Link from "next/link";
 
 const STEPS = [
   { key: "downloading", label: "Descargando", icon: Download },
   { key: "transcribing", label: "Transcribiendo", icon: Mic },
+  { key: "extracting_frames", label: "Extrayendo frames", icon: Video },
+  { key: "analyzing_frames", label: "Analizando video", icon: Eye },
   { key: "embedding", label: "Generando embeddings", icon: Brain },
   { key: "done", label: "Listo", icon: CheckCircle },
 ] as const;

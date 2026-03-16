@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     data_dir: str = str(Path(__file__).resolve().parent.parent / "data")
     chunk_duration: int = 180
     whisper_model: str = "base"
+    # Video analysis
+    enable_video_analysis: bool = True
+    frame_interval: int = 30
+    frame_similarity_threshold: int = 5
+    vision_model: str = "claude-haiku-4-5-20251001"
     # Adaptive retrieval settings for broad queries
     broad_per_class_results: int = 10
     broad_n_results: int = 10

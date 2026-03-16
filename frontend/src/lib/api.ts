@@ -28,7 +28,7 @@ export interface ChatResponse {
 }
 
 export interface IngestStatus {
-  status: "pending" | "downloading" | "transcribing" | "embedding" | "done" | "error";
+  status: "pending" | "downloading" | "transcribing" | "extracting_frames" | "analyzing_frames" | "embedding" | "done" | "error";
   message: string;
   progress: number;
 }

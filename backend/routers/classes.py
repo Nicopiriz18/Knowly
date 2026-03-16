@@ -64,7 +64,7 @@ def delete_class(class_id: str):
 
     # Remove audio and transcript files from disk
     data_dir = Path(settings.data_dir)
-    for subdir in ("audio", "transcripts"):
+    for subdir in ("audio", "transcripts", "visual"):
         for f in (data_dir / subdir).glob(f"{class_id}.*"):
             f.unlink(missing_ok=True)
 
