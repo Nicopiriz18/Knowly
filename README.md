@@ -63,10 +63,10 @@ graph TB
     Frontend -->|HTTP / SSE| Backend
 
     subgraph Backend["Backend — FastAPI + Uvicorn"]
-        R1[/materias]
-        R2[/classes]
-        R3[/ingest]
-        R4[/chat]
+        R1["/materias"]
+        R2["/classes"]
+        R3["/ingest"]
+        R4["/chat"]
         R1 & R2 --> MateriaService["materia_service.py\n(JSON storage)"]
         R3 --> IngestService[Ingest Service]
         R4 --> RAGService["RAG Service\n(LangGraph)"]
