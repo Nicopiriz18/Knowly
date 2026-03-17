@@ -4,7 +4,6 @@ import json
 from collections.abc import AsyncGenerator
 from typing import TypedDict
 
-import chromadb
 from langchain_anthropic import ChatAnthropic
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -13,6 +12,8 @@ from langgraph.graph import END, StateGraph
 
 from config import settings
 from schemas import Source
+from services.pinecone_client import get_index
+from services.class_service import list_classes
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -75,14 +76,14 @@ class RAGState(TypedDict):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _search_chromadb(
+def _search_pinecone(
     query: str,
     class_id: str | None = None,
     materia_id: str | None = None,
     n_results: int = 4,
     per_class_results: int = 2,
 ) -> list[Document]:
-    """Search ChromaDB and return LangChain Documents.
+    """Search Pinecone and return LangChain Documents.
 
     When searching by materia_id, retrieves top chunks from each class
     separately to ensure coverage across all classes in the materia.
@@ -95,48 +96,42 @@ def _search_chromadb(
     )
     query_embedding = embeddings.embed_query(query)
 
-    chroma = chromadb.PersistentClient(path=settings.chroma_dir)
-    collection = chroma.get_or_create_collection("classes")
-
-    if collection.count() == 0:
-        return []
+    index = get_index()
 
     # When querying by materia, search per-class to ensure diversity
     if materia_id is not None and class_id is None:
         return _search_per_class(
-            collection, query_embedding, materia_id, per_class_results
+            index, query_embedding, materia_id, per_class_results
         )
 
     query_params: dict = {
-        "query_embeddings": [query_embedding],
-        "n_results": n_results,
+        "vector": query_embedding,
+        "top_k": n_results,
+        "include_metadata": True,
     }
     if class_id is not None:
-        query_params["where"] = {"class_id": class_id}
+        query_params["filter"] = {"class_id": {"$eq": class_id}}
 
-    results = collection.query(**query_params)
+    results = index.query(**query_params)
 
     docs: list[Document] = []
-    if results["documents"] and results["documents"][0]:
-        for i, doc_text in enumerate(results["documents"][0]):
-            meta = results["metadatas"][0][i]
-            docs.append(Document(page_content=doc_text, metadata=meta))
+    for match in results.matches:
+        meta = dict(match.metadata)
+        text = meta.pop("text", "")
+        docs.append(Document(page_content=text, metadata=meta))
     return docs
 
 
 def _search_per_class(
-    collection: chromadb.Collection,
+    index,
     query_embedding: list[float],
     materia_id: str,
     per_class: int = 2,
 ) -> list[Document]:
     """Retrieve top chunks from each class in a materia for broad coverage."""
-    # First, discover all distinct class_ids in this materia
-    all_data = collection.get(
-        where={"materia_id": materia_id},
-        include=["metadatas"],
-    )
-    class_ids = list({meta["class_id"] for meta in all_data["metadatas"]})
+    # Discover class_ids from the JSON registry
+    classes = list_classes(materia_id)
+    class_ids = [c["class_id"] for c in classes]
 
     if not class_ids:
         return []
@@ -144,15 +139,16 @@ def _search_per_class(
     # Query each class separately and collect results
     docs: list[Document] = []
     for cid in class_ids:
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=per_class,
-            where={"class_id": cid},
+        results = index.query(
+            vector=query_embedding,
+            top_k=per_class,
+            filter={"class_id": {"$eq": cid}},
+            include_metadata=True,
         )
-        if results["documents"] and results["documents"][0]:
-            for i, doc_text in enumerate(results["documents"][0]):
-                meta = results["metadatas"][0][i]
-                docs.append(Document(page_content=doc_text, metadata=meta))
+        for match in results.matches:
+            meta = dict(match.metadata)
+            text = meta.pop("text", "")
+            docs.append(Document(page_content=text, metadata=meta))
 
     return docs
 
@@ -237,7 +233,7 @@ async def classify(state: RAGState) -> dict:
 
 
 def retrieve(state: RAGState) -> dict:
-    """Retrieve relevant documents from ChromaDB, adapting to query type."""
+    """Retrieve relevant documents from Pinecone, adapting to query type."""
     query_type = state.get("query_type", "specific")
 
     if query_type == "broad":
@@ -247,7 +243,7 @@ def retrieve(state: RAGState) -> dict:
         per_class = 2
         n_results = 4
 
-    docs = _search_chromadb(
+    docs = _search_pinecone(
         state["query"],
         class_id=state.get("class_id"),
         materia_id=state.get("materia_id"),
@@ -395,7 +391,7 @@ async def query_rag_stream(
         per_class = 2
         n_results = 4
 
-    docs = _search_chromadb(
+    docs = _search_pinecone(
         query, class_id=class_id, materia_id=materia_id,
         n_results=n_results, per_class_results=per_class,
     )

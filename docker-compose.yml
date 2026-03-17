@@ -8,10 +8,8 @@ services:
     env_file:
       - .env
     environment:
-      - CHROMA_DIR=/app/chroma_db
       - DATA_DIR=/app/data
     volumes:
-      - ./chroma_db:/app/chroma_db
       - ./data:/app/data
     restart: unless-stopped
 

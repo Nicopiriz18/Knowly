@@ -4,7 +4,7 @@
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
   <img src="https://img.shields.io/badge/Claude_AI-CC785C?style=for-the-badge&logo=anthropic&logoColor=white" />
   <img src="https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white" />
-  <img src="https://img.shields.io/badge/ChromaDB-FF6F61?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Pinecone-000000?style=for-the-badge&logo=pinecone&logoColor=white" />
   <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
 </p>
 
@@ -67,7 +67,7 @@ graph TB
         R2["/classes"]
         R3["/ingest"]
         R4["/chat"]
-        R1 & R2 --> MateriaService["materia_service.py\n(JSON storage)"]
+        R1 & R2 --> Services["materia_service.py\nclass_service.py\n(JSON storage)"]
         R3 --> IngestService[Ingest Service]
         R4 --> RAGService["RAG Service\n(LangGraph)"]
     end
@@ -75,13 +75,13 @@ graph TB
     subgraph External["Servicios Externos"]
         ytdlp["yt-dlp + ffmpeg"]
         Whisper["Whisper (STT)"]
-        ChromaDB["ChromaDB (Vectors)"]
+        Pinecone["Pinecone (Vectors)"]
         Claude["Claude\n(Vision + Generation)"]
         OpenAIEmb["OpenAI Embeddings\n(text-emb-3-sm)"]
     end
 
-    IngestService --> ytdlp & Whisper & OpenAIEmb & ChromaDB & Claude
-    RAGService --> ChromaDB & Claude
+    IngestService --> ytdlp & Whisper & OpenAIEmb & Pinecone & Claude
+    RAGService --> Pinecone & Claude
 ```
 
 ---
@@ -95,7 +95,7 @@ graph TB
 | **Orquestacion RAG** | LangGraph, LangChain | Workflow agentico |
 | **LLM** | Claude Sonnet 4 (generacion), Claude Haiku 4.5 (clasificacion + vision) | Respuestas y analisis |
 | **Embeddings** | OpenAI text-embedding-3-small | Vectorizacion de texto |
-| **Vector DB** | ChromaDB | Almacenamiento y busqueda de vectores |
+| **Vector DB** | Pinecone (serverless, free tier) | Almacenamiento y busqueda de vectores |
 | **Transcripcion** | OpenAI Whisper (base) | Speech-to-text |
 | **Descarga de video** | yt-dlp + ffmpeg | Descarga y procesamiento multimedia |
 | **Procesamiento de imagen** | Pillow | Hashing perceptual de frames |
@@ -110,6 +110,17 @@ graph TB
 - **ffmpeg** instalado en el sistema (para desarrollo local)
 - **API Key de Anthropic** — [Obtener aqui](https://console.anthropic.com/)
 - **API Key de OpenAI** — [Obtener aqui](https://platform.openai.com/api-keys)
+- **API Key de Pinecone** — [Obtener aqui](https://app.pinecone.io/)
+
+### Setup de Pinecone (one-time)
+
+1. Crear una cuenta gratuita en [Pinecone](https://app.pinecone.io/)
+2. Crear un index con la siguiente configuracion:
+   - **Nombre**: `classes`
+   - **Dimension**: `1536` (text-embedding-3-small)
+   - **Metrica**: `cosine`
+   - **Tipo**: Serverless (aws / us-east-1)
+3. Copiar la API key y agregarla al archivo `.env`
 
 ---
 
@@ -124,7 +135,7 @@ cd Knowly
 
 # 2. Configurar variables de entorno
 cp .env.example .env
-# Editar .env con tus API keys
+# Editar .env con tus API keys (ANTHROPIC, OPENAI, PINECONE)
 
 # 3. Levantar los servicios
 docker-compose up --build
@@ -182,6 +193,7 @@ Crear un archivo `.env` en la raiz del proyecto:
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
+PINECONE_API_KEY=pcsk_...
 ```
 
 ### Parametros Avanzados
@@ -199,6 +211,7 @@ Los siguientes parametros se pueden ajustar en `backend/config.py`:
 | `broad_per_class_results` | `10` | Resultados por clase para queries amplias |
 | `broad_n_results` | `10` | Total de resultados para queries amplias |
 | `max_context_chars` | `80000` | Limite de caracteres de contexto |
+| `pinecone_index_name` | `"classes"` | Nombre del index en Pinecone |
 
 ---
 
@@ -296,7 +309,7 @@ graph TB
     Whisper --> Merge["Merge: texto\n+ descripciones visuales"]
     Vision --> Merge
     Merge --> Chunking["Chunking + Metadata\nSegmentos de ~3 min con timestamps,\nlinks, materia_id"]
-    Chunking --> Store["OpenAI Embeddings + ChromaDB\nAlmacenamiento vectorial persistente"]
+    Chunking --> Store["OpenAI Embeddings + Pinecone\nAlmacenamiento vectorial en la nube"]
 ```
 
 ---
@@ -310,7 +323,7 @@ graph TB
     Query["Query del usuario"] --> Classify
     Classify["CLASIFICAR\nClaude Haiku determina si la query\nes 'amplia' o 'especifica'"]
     Classify --> Retrieve
-    Retrieve["RECUPERAR\nBusqueda semantica en ChromaDB\nAmplia: 10 resultados, mas contexto\nEspecifica: 4 resultados, mas precision"]
+    Retrieve["RECUPERAR\nBusqueda semantica en Pinecone\nAmplia: 10 resultados, mas contexto\nEspecifica: 4 resultados, mas precision"]
     Retrieve --> Evaluate
     Evaluate["EVALUAR DOCUMENTOS\nClaude Haiku filtra fragmentos\nirrelevantes (solo queries especificas)"]
     Evaluate --> Generate
@@ -336,6 +349,8 @@ Knowly/
 │   │   └── chat.py                # Chat + streaming SSE
 │   └── services/
 │       ├── materia_service.py     # Gestion de materias (JSON)
+│       ├── class_service.py       # Gestion de clases (JSON)
+│       ├── pinecone_client.py     # Cliente Pinecone centralizado
 │       ├── ingest_service.py      # Pipeline de ingesta completo
 │       └── rag_service.py         # Orquestacion RAG con LangGraph
 │
@@ -354,13 +369,13 @@ Knowly/
 │
 ├── data/                          # Datos generados
 │   ├── materias.json              # Metadata de materias
+│   ├── classes_registry.json      # Registro de clases indexadas
 │   ├── audio/                     # Archivos de audio (MP3)
 │   ├── transcripts/               # Transcripciones (JSON)
 │   ├── raw_videos/                # Videos descargados (temporal)
 │   ├── frames/                    # Frames extraidos (temporal)
 │   └── visual/                    # Descripciones visuales (JSON)
 │
-├── chroma_db/                     # Base de datos vectorial persistente
 ├── docker-compose.yml             # Orquestacion Docker
 ├── .env.example                   # Template de variables de entorno
 │

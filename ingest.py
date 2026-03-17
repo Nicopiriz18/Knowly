@@ -1,4 +1,4 @@
-"""Pipeline: download audio → transcribe → chunk → embed → store in ChromaDB."""
+"""Pipeline: download audio -> transcribe -> chunk -> embed -> store in Pinecone."""
 
 import argparse
 import json
@@ -8,17 +8,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-import chromadb
 import openai
-import whisper
 from dotenv import load_dotenv
+from pinecone import Pinecone
 
 load_dotenv()
 
 DATA_DIR = Path("data")
 TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
 AUDIO_DIR = DATA_DIR / "audio"
-CHROMA_DIR = Path("chroma_db")
 CHUNK_DURATION = 180  # 3 minutes in seconds
 
 
@@ -38,11 +36,7 @@ def _find_ytdlp() -> str:
 
 
 def download_audio(url: str, class_id: str) -> tuple[Path, str]:
-    """Download audio using yt-dlp. Returns (audio_path, youtube_video_id).
-
-    Accepts YouTube URLs directly. Khan Academy videos are hosted on YouTube,
-    so the user should provide the YouTube URL of the Khan Academy video.
-    """
+    """Download audio using yt-dlp. Returns (audio_path, youtube_video_id)."""
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     output_path = AUDIO_DIR / f"{class_id}.mp3"
     ytdlp = _find_ytdlp()
@@ -89,6 +83,7 @@ def transcribe(audio_path: Path, class_id: str) -> list[dict]:
             return json.load(f)
 
     print("Transcribing with Whisper (model: base)...")
+    import whisper
     model = whisper.load_model("base")
     result = model.transcribe(str(audio_path), language=None)
 
@@ -156,53 +151,53 @@ def build_chunks(
 
 
 def embed_and_store(chunks: list[dict]) -> None:
-    """Generate embeddings and store in ChromaDB."""
+    """Generate embeddings and store in Pinecone."""
     client = openai.OpenAI()
-    chroma = chromadb.PersistentClient(path=str(CHROMA_DIR))
-    collection = chroma.get_or_create_collection("classes")
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    index = pc.Index(os.getenv("PINECONE_INDEX_NAME", "classes"))
 
     texts = [c["text"] for c in chunks]
     print(f"Generating embeddings for {len(texts)} chunks...")
 
-    # OpenAI allows batching up to 2048 inputs
     response = client.embeddings.create(
         model="text-embedding-3-small",
         input=texts,
     )
     embeddings = [item.embedding for item in response.data]
 
-    ids = [f"{chunks[i]['class_id']}_chunk_{i}" for i in range(len(chunks))]
-    metadatas = [
-        {
-            "class_id": c["class_id"],
-            "class_title": c["class_title"],
-            "source_url": c["source_url"],
-            "start_time": c["start_time"],
-            "end_time": c["end_time"],
-            "timestamp_link": c["timestamp_link"],
+    vectors = []
+    for i, chunk in enumerate(chunks):
+        vec_id = f"{chunk['class_id']}_chunk_{i}"
+        metadata = {
+            "class_id": chunk["class_id"],
+            "class_title": chunk["class_title"],
+            "source_url": chunk["source_url"],
+            "start_time": chunk["start_time"],
+            "end_time": chunk["end_time"],
+            "timestamp_link": chunk["timestamp_link"],
+            "text": chunk["text"],
         }
-        for c in chunks
-    ]
+        vectors.append((vec_id, embeddings[i], metadata))
 
-    collection.upsert(
-        ids=ids,
-        embeddings=embeddings,
-        documents=texts,
-        metadatas=metadatas,
-    )
+    # Upsert in batches of 100
+    for i in range(0, len(vectors), 100):
+        index.upsert(vectors=vectors[i:i + 100])
 
-    print(f"✅ Clase indexada: {len(chunks)} chunks guardados")
+    print(f"Clase indexada: {len(chunks)} chunks guardados en Pinecone")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingest a Khan Academy class into Knowly")
-    parser.add_argument("--url", required=True, help="YouTube URL of the Khan Academy video")
-    parser.add_argument("--title", required=True, help='Class title, e.g. "Álgebra - Variables"')
+    parser = argparse.ArgumentParser(description="Ingest a class into Knowly")
+    parser.add_argument("--url", required=True, help="YouTube URL of the video")
+    parser.add_argument("--title", required=True, help='Class title, e.g. "Algebra - Variables"')
     parser.add_argument("--class_id", required=True, help='Class ID, e.g. "algebra_01"')
     args = parser.parse_args()
 
     if not os.getenv("OPENAI_API_KEY"):
         print("Error: OPENAI_API_KEY not set. Check your .env file.")
+        sys.exit(1)
+    if not os.getenv("PINECONE_API_KEY"):
+        print("Error: PINECONE_API_KEY not set. Check your .env file.")
         sys.exit(1)
 
     audio_path, video_id = download_audio(args.url, args.class_id)

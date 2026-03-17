@@ -9,10 +9,10 @@ _env_file = Path(__file__).resolve().parent.parent / ".env"
 class Settings(BaseSettings):
     openai_api_key: str
     anthropic_api_key: str
-    chroma_dir: str = str(Path(__file__).resolve().parent.parent / "chroma_db")
+    pinecone_api_key: str
+    pinecone_index_name: str = "classes"
     data_dir: str = str(Path(__file__).resolve().parent.parent / "data")
     chunk_duration: int = 180
-    whisper_model: str = "base"
     # Video analysis
     enable_video_analysis: bool = True
     frame_interval: int = 30

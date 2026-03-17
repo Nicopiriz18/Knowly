@@ -3,7 +3,6 @@
 from pathlib import Path
 from uuid import uuid4
 
-import chromadb
 from fastapi import APIRouter, HTTPException
 
 from config import settings
@@ -14,6 +13,8 @@ from services.materia_service import (
     create_materia,
     delete_materia,
 )
+from services.class_service import count_classes_by_materia, delete_classes_by_materia
+from services.pinecone_client import get_index
 
 router = APIRouter()
 
@@ -22,24 +23,11 @@ router = APIRouter()
 def list_all_materias():
     """List all materias with their class counts."""
     materias = list_materias()
-
-    # Count unique classes per materia from ChromaDB
-    chroma = chromadb.PersistentClient(path=settings.chroma_dir)
-    collection = chroma.get_or_create_collection("classes")
-
-    class_counts: dict[str, set[str]] = {}
-    if collection.count() > 0:
-        all_data = collection.get(include=["metadatas"])
-        for meta in all_data["metadatas"]:
-            mid = meta.get("materia_id", "")
-            cid = meta["class_id"]
-            class_counts.setdefault(mid, set()).add(cid)
-
     return [
         MateriaInfo(
             materia_id=m["materia_id"],
             title=m["title"],
-            class_count=len(class_counts.get(m["materia_id"], set())),
+            class_count=count_classes_by_materia(m["materia_id"]),
         )
         for m in materias
     ]
@@ -59,22 +47,14 @@ def delete_existing_materia(materia_id: str):
     if not delete_materia(materia_id):
         raise HTTPException(status_code=404, detail=f"Materia '{materia_id}' not found.")
 
-    # Also delete all chunks belonging to this materia
-    chroma = chromadb.PersistentClient(path=settings.chroma_dir)
-    collection = chroma.get_or_create_collection("classes")
+    # Delete vectors from Pinecone
+    index = get_index()
+    index.delete(filter={"materia_id": {"$eq": materia_id}})
 
-    class_ids: set[str] = set()
-    if collection.count() > 0:
-        results = collection.get(
-            where={"materia_id": materia_id},
-            include=["metadatas"],
-        )
-        if results["ids"]:
-            for meta in results["metadatas"]:
-                class_ids.add(meta["class_id"])
-            collection.delete(ids=results["ids"])
+    # Remove classes from registry and get their IDs for disk cleanup
+    class_ids = delete_classes_by_materia(materia_id)
 
-    # Remove audio and transcript files from disk
+    # Remove audio, transcript, and visual files from disk
     data_dir = Path(settings.data_dir)
     for cid in class_ids:
         for subdir in ("audio", "transcripts", "visual"):

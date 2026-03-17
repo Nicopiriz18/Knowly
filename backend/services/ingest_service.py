@@ -9,12 +9,12 @@ import sys
 import threading
 from pathlib import Path
 
-import chromadb
 import openai
-import whisper
 
 from config import settings
 from schemas import IngestStatus
+from services.pinecone_client import get_index
+from services.class_service import register_class
 
 # In-memory job tracker
 jobs: dict[str, IngestStatus] = {}
@@ -103,7 +103,7 @@ def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str]:
 
 
 def _transcribe(audio_path: Path, class_id: str) -> list[dict]:
-    """Transcribe audio with Whisper and return segments."""
+    """Transcribe audio with OpenAI Whisper API and return segments."""
     transcripts_dir = Path(settings.data_dir) / "transcripts"
     transcripts_dir.mkdir(parents=True, exist_ok=True)
     transcript_path = transcripts_dir / f"{class_id}.json"
@@ -112,12 +112,19 @@ def _transcribe(audio_path: Path, class_id: str) -> list[dict]:
         with open(transcript_path) as f:
             return json.load(f)
 
-    model = whisper.load_model(settings.whisper_model)
-    result = model.transcribe(str(audio_path), language=None)
+    client = openai.OpenAI(api_key=settings.openai_api_key)
+
+    with open(audio_path, "rb") as audio_file:
+        result = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            response_format="verbose_json",
+            timestamp_granularities=["segment"],
+        )
 
     segments = [
-        {"start": s["start"], "end": s["end"], "text": s["text"].strip()}
-        for s in result["segments"]
+        {"start": s.start, "end": s.end, "text": s.text.strip()}
+        for s in result.segments
     ]
 
     with open(transcript_path, "w", encoding="utf-8") as f:
@@ -348,10 +355,9 @@ def _build_chunks(
 
 
 def _embed_and_store(chunks: list[dict]) -> None:
-    """Generate embeddings and store in ChromaDB."""
+    """Generate embeddings and store in Pinecone."""
     client = openai.OpenAI(api_key=settings.openai_api_key)
-    chroma = chromadb.PersistentClient(path=settings.chroma_dir)
-    collection = chroma.get_or_create_collection("classes")
+    index = get_index()
 
     texts = [c["text"] for c in chunks]
 
@@ -361,26 +367,36 @@ def _embed_and_store(chunks: list[dict]) -> None:
     )
     embeddings = [item.embedding for item in response.data]
 
-    ids = [f"{chunks[i]['class_id']}_chunk_{i}" for i in range(len(chunks))]
-    metadatas = [
-        {
-            "class_id": c["class_id"],
-            "class_title": c["class_title"],
-            "source_url": c["source_url"],
-            "materia_id": c["materia_id"],
-            "start_time": c["start_time"],
-            "end_time": c["end_time"],
-            "timestamp_link": c["timestamp_link"],
+    # Build vectors with text stored in metadata
+    vectors = []
+    for i, chunk in enumerate(chunks):
+        vec_id = f"{chunk['class_id']}_chunk_{i}"
+        metadata = {
+            "class_id": chunk["class_id"],
+            "class_title": chunk["class_title"],
+            "source_url": chunk["source_url"],
+            "materia_id": chunk["materia_id"],
+            "start_time": chunk["start_time"],
+            "end_time": chunk["end_time"],
+            "timestamp_link": chunk["timestamp_link"],
+            "text": chunk["text"],
         }
-        for c in chunks
-    ]
+        vectors.append((vec_id, embeddings[i], metadata))
 
-    collection.upsert(
-        ids=ids,
-        embeddings=embeddings,
-        documents=texts,
-        metadatas=metadatas,
-    )
+    # Upsert in batches of 100 (Pinecone limit)
+    for i in range(0, len(vectors), 100):
+        index.upsert(vectors=vectors[i:i + 100])
+
+    # Register class in JSON registry
+    if chunks:
+        c = chunks[0]
+        register_class(
+            class_id=c["class_id"],
+            class_title=c["class_title"],
+            source_url=c["source_url"],
+            materia_id=c["materia_id"],
+            chunk_count=len(chunks),
+        )
 
 
 def _cleanup_video_files(class_id: str, video_path: Path | None) -> None:
