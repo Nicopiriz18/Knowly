@@ -11,7 +11,7 @@ import {
 } from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
 import ChatMessage from "@/components/ChatMessage";
-import { Send, GraduationCap } from "lucide-react";
+import { Send, GraduationCap, Bot, Sparkles } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -29,6 +29,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isStreamingRef = useRef(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -99,39 +100,46 @@ export default function Home() {
 
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
-      let assistantText = "";
+      let receivedText = "";
+      let displayedText = "";
       let sources: Source[] = [];
       let sseBuffer = "";
-      let renderPending = false;
+
+      const CHARS_PER_TICK = 3;
+      const TICK_MS = 12;
 
       // Add empty assistant message
       setIsStreaming(true);
+      isStreamingRef.current = true;
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "", sources: [] },
       ]);
 
-      const flushToUI = () => {
-        renderPending = false;
-        const updatedContent = assistantText;
-        const updatedSources = [...sources];
-        setMessages((prev) => {
-          const copy = [...prev];
-          copy[copy.length - 1] = {
-            role: "assistant",
-            content: updatedContent,
-            sources: updatedSources.length > 0 ? updatedSources : undefined,
-          };
-          return copy;
-        });
-      };
-
-      const scheduleRender = () => {
-        if (!renderPending) {
-          renderPending = true;
-          requestAnimationFrame(flushToUI);
+      // Drip interval: moves chars from receivedText to displayedText
+      const dripInterval = setInterval(() => {
+        if (displayedText.length < receivedText.length) {
+          const nextEnd = Math.min(
+            displayedText.length + CHARS_PER_TICK,
+            receivedText.length
+          );
+          displayedText = receivedText.slice(0, nextEnd);
+          const snap = displayedText;
+          const srcSnap = [...sources];
+          setMessages((prev) => {
+            const copy = [...prev];
+            copy[copy.length - 1] = {
+              role: "assistant",
+              content: snap,
+              sources: srcSnap.length > 0 ? srcSnap : undefined,
+            };
+            return copy;
+          });
+        } else if (!isStreamingRef.current) {
+          // Stream ended and display caught up — stop interval
+          clearInterval(dripInterval);
         }
-      };
+      }, TICK_MS);
 
       while (true) {
         const { done, value } = await reader.read();
@@ -157,19 +165,29 @@ export default function Home() {
             // Stream complete
           } else {
             try {
-              assistantText += JSON.parse(data);
+              receivedText += JSON.parse(data);
             } catch {
-              assistantText += data;
+              receivedText += data;
             }
           }
         }
-
-        scheduleRender();
       }
 
-      flushToUI();
+      // Stream ended — snap to final text immediately
+      isStreamingRef.current = false;
+      clearInterval(dripInterval);
       setIsStreaming(false);
+      setMessages((prev) => {
+        const copy = [...prev];
+        copy[copy.length - 1] = {
+          role: "assistant",
+          content: receivedText,
+          sources: sources.length > 0 ? sources : undefined,
+        };
+        return copy;
+      });
     } catch {
+      isStreamingRef.current = false;
       setIsStreaming(false);
       try {
         const res = await fetch(`${API}/chat`, {
@@ -236,30 +254,31 @@ export default function Home() {
       />
 
       {/* Chat area */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 bg-[#0a0a0f]">
         {/* Header */}
-        <header className="h-14 border-b border-gray-800 flex items-center px-5 shrink-0 bg-gray-950">
-          <h2 className="text-sm font-medium text-gray-300 truncate">
+        <header className="h-12 border-b border-white/[0.06] flex items-center px-6 shrink-0">
+          <h2 className="text-[13px] font-medium text-gray-500 truncate">
             {headerLabel}
           </h2>
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <GraduationCap className="w-16 h-16 text-gray-700 mb-4" />
-              <h3 className="text-lg font-medium text-gray-500 mb-2">
+            <div className="flex flex-col items-center justify-center h-full text-center px-6">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center mb-5">
+                <Sparkles className="w-7 h-7 text-indigo-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2 tracking-tight">
                 Bienvenido a Knowly
               </h3>
-              <p className="text-sm text-gray-600 max-w-md">
+              <p className="text-[13px] text-gray-500 max-w-sm leading-relaxed">
                 Pregunta lo que quieras sobre tus clases universitarias.
-                Selecciona una materia o clase en el panel izquierdo o pregunta
-                sobre todas.
+                Selecciona una materia o clase en el panel izquierdo.
               </p>
             </div>
           ) : (
-            <>
+            <div className="max-w-3xl mx-auto px-6 py-6">
               {messages.map((msg, idx) => (
                 <ChatMessage
                   key={idx}
@@ -275,51 +294,57 @@ export default function Home() {
               ))}
               {loading &&
                 messages[messages.length - 1]?.role === "user" && (
-                  <div className="flex items-start gap-3 mb-6">
-                    <div className="w-7 h-7 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center shrink-0">
+                  <div className="flex items-start gap-3 mb-6 animate-message-in">
+                    <div className="w-7 h-7 rounded-lg bg-white/[0.06] flex items-center justify-center shrink-0">
+                      <Bot className="w-3.5 h-3.5 text-indigo-400" />
+                    </div>
+                    <div className="flex items-center gap-2.5 py-1.5">
                       <div className="flex gap-1">
                         <span
-                          className="w-1 h-1 bg-gray-500 rounded-full animate-bounce"
+                          className="w-1.5 h-1.5 bg-indigo-400 rounded-full thinking-pulse"
                           style={{ animationDelay: "0ms" }}
                         />
                         <span
-                          className="w-1 h-1 bg-gray-500 rounded-full animate-bounce"
-                          style={{ animationDelay: "150ms" }}
-                        />
-                        <span
-                          className="w-1 h-1 bg-gray-500 rounded-full animate-bounce"
+                          className="w-1.5 h-1.5 bg-indigo-400 rounded-full thinking-pulse"
                           style={{ animationDelay: "300ms" }}
                         />
+                        <span
+                          className="w-1.5 h-1.5 bg-indigo-400 rounded-full thinking-pulse"
+                          style={{ animationDelay: "600ms" }}
+                        />
                       </div>
+                      <span className="text-[11px] text-gray-600">Pensando...</span>
                     </div>
                   </div>
                 )}
               <div ref={messagesEndRef} />
-            </>
+            </div>
           )}
         </div>
 
         {/* Input */}
-        <div className="p-4 border-t border-gray-800 bg-gray-950">
+        <div className="px-6 pb-5 pt-3">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               sendMessage();
             }}
-            className="flex items-end gap-3 max-w-3xl mx-auto"
+            className="flex items-end gap-2.5 max-w-3xl mx-auto"
           >
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Escribe tu pregunta..."
-              rows={1}
-              className="flex-1 resize-none bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-            />
+            <div className="flex-1 relative">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Escribe tu pregunta..."
+                rows={1}
+                className="w-full resize-none bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500/40 input-glow transition-all"
+              />
+            </div>
             <button
               type="submit"
               disabled={loading || !input.trim()}
-              className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-xl transition-colors shrink-0"
+              className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/[0.05] disabled:text-gray-700 text-white rounded-xl transition-all duration-150 shrink-0 hover:shadow-lg hover:shadow-indigo-600/20"
             >
               <Send className="w-4 h-4" />
             </button>

@@ -155,15 +155,15 @@ export default function IngestPage() {
           {/* Back link */}
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-300 mb-6 transition-colors"
+            className="inline-flex items-center gap-1.5 text-[13px] text-gray-600 hover:text-gray-300 mb-6 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Volver al chat
           </Link>
 
           {/* Form card */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-            <h2 className="text-xl font-semibold text-white mb-6">
+          <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-6 tracking-tight">
               Agregar nueva clase
             </h2>
 
@@ -171,7 +171,7 @@ export default function IngestPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Materia selection */}
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1.5">
+                  <label className="block text-[13px] text-gray-500 mb-1.5">
                     Materia
                   </label>
                   {!showNewMateria ? (
@@ -179,7 +179,7 @@ export default function IngestPage() {
                       <select
                         value={materiaId}
                         onChange={(e) => setMateriaId(e.target.value)}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-gray-100 focus:outline-none focus:border-indigo-500/40 input-glow transition-all"
                       >
                         <option value="">Seleccionar materia...</option>
                         {materias.map((m) => (
@@ -191,7 +191,7 @@ export default function IngestPage() {
                       <button
                         type="button"
                         onClick={() => setShowNewMateria(true)}
-                        className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                        className="inline-flex items-center gap-1.5 text-[12px] text-indigo-400/80 hover:text-indigo-300 transition-colors"
                       >
                         <Plus className="w-3 h-3" />
                         Crear nueva materia
@@ -204,7 +204,7 @@ export default function IngestPage() {
                         value={newMateriaTitle}
                         onChange={(e) => setNewMateriaTitle(e.target.value)}
                         placeholder="Ej: Calculo II"
-                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500/40 input-glow transition-all"
                       />
                       <button
                         type="button"
@@ -212,7 +212,7 @@ export default function IngestPage() {
                           setShowNewMateria(false);
                           setNewMateriaTitle("");
                         }}
-                        className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                        className="text-[12px] text-gray-600 hover:text-gray-400 transition-colors"
                       >
                         Usar materia existente
                       </button>
@@ -221,7 +221,7 @@ export default function IngestPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1.5">
+                  <label className="block text-[13px] text-gray-500 mb-1.5">
                     URL de YouTube
                   </label>
                   <input
@@ -230,12 +230,12 @@ export default function IngestPage() {
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="https://www.youtube.com/watch?v=..."
                     required
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500/40 input-glow transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1.5">
+                  <label className="block text-[13px] text-gray-500 mb-1.5">
                     Titulo de la clase
                   </label>
                   <input
@@ -244,12 +244,12 @@ export default function IngestPage() {
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Ej: Clase 5 - Integrales"
                     required
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500/40 input-glow transition-all"
                   />
                 </div>
 
                 {error && (
-                  <div className="flex items-center gap-2 text-red-400 text-sm bg-red-950/30 border border-red-900/50 rounded-xl p-3">
+                  <div className="flex items-center gap-2 text-red-400 text-[13px] bg-red-950/20 border border-red-500/10 rounded-xl p-3">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     {error}
                   </div>
@@ -257,15 +257,15 @@ export default function IngestPage() {
 
                 <button
                   type="submit"
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 rounded-xl transition-colors"
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-[13px] font-medium py-2.5 rounded-xl transition-all duration-150 hover:shadow-lg hover:shadow-indigo-600/10"
                 >
                   Indexar clase
                 </button>
               </form>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 {/* Progress stepper */}
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {STEPS.map((step, idx) => {
                     const Icon = step.icon;
                     const isActive = idx === currentStepIndex;
@@ -277,21 +277,21 @@ export default function IngestPage() {
                     return (
                       <div
                         key={step.key}
-                        className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
+                        className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
                           isActive
-                            ? "bg-indigo-600/10 border border-indigo-500/30"
+                            ? "bg-indigo-600/10 border border-indigo-500/20"
                             : isComplete
-                            ? "bg-green-600/10 border border-green-500/20"
-                            : "bg-gray-800/50 border border-gray-800"
+                            ? "bg-emerald-600/5 border border-emerald-500/10"
+                            : "bg-white/[0.02] border border-white/[0.04]"
                         }`}
                       >
                         <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                             isComplete
-                              ? "bg-green-600/20 text-green-400"
+                              ? "bg-emerald-600/15 text-emerald-400"
                               : isActive
-                              ? "bg-indigo-600/20 text-indigo-400"
-                              : "bg-gray-800 text-gray-600"
+                              ? "bg-indigo-600/15 text-indigo-400"
+                              : "bg-white/[0.04] text-gray-700"
                           }`}
                         >
                           {isComplete ? (
@@ -303,14 +303,14 @@ export default function IngestPage() {
                           )}
                         </div>
                         <span
-                          className={`text-sm font-medium ${
+                          className={`text-[13px] font-medium ${
                             isComplete
-                              ? "text-green-400"
+                              ? "text-emerald-400"
                               : isActive
                               ? "text-indigo-400"
                               : isPending
-                              ? "text-gray-600"
-                              : "text-gray-400"
+                              ? "text-gray-700"
+                              : "text-gray-500"
                           }`}
                         >
                           {step.label}
@@ -322,14 +322,14 @@ export default function IngestPage() {
 
                 {/* Status message */}
                 {status?.message && (
-                  <p className="text-xs text-gray-500 text-center">
+                  <p className="text-[12px] text-gray-600 text-center">
                     {status.message}
                   </p>
                 )}
 
                 {/* Error */}
                 {error && (
-                  <div className="flex items-center gap-2 text-red-400 text-sm bg-red-950/30 border border-red-900/50 rounded-xl p-3">
+                  <div className="flex items-center gap-2 text-red-400 text-[13px] bg-red-950/20 border border-red-500/10 rounded-xl p-3">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     {error}
                   </div>
@@ -338,12 +338,12 @@ export default function IngestPage() {
                 {/* Done */}
                 {status?.status === "done" && (
                   <div className="text-center">
-                    <p className="text-green-400 text-sm font-medium mb-3">
+                    <p className="text-emerald-400 text-[13px] font-medium mb-3">
                       Clase indexada exitosamente!
                     </p>
                     <Link
                       href="/"
-                      className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors"
+                      className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[13px] font-medium px-5 py-2.5 rounded-xl transition-all duration-150 hover:shadow-lg hover:shadow-indigo-600/10"
                     >
                       Ir al chat
                     </Link>
@@ -358,7 +358,7 @@ export default function IngestPage() {
                       setStatus(null);
                       setError(null);
                     }}
-                    className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium py-2.5 rounded-xl transition-colors"
+                    className="w-full bg-white/[0.06] hover:bg-white/[0.1] text-gray-400 text-[13px] font-medium py-2.5 rounded-xl transition-all duration-150"
                   >
                     Intentar de nuevo
                   </button>

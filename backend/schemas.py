@@ -44,7 +44,7 @@ class IngestResponse(BaseModel):
 
 
 class IngestStatus(BaseModel):
-    status: Literal["pending", "downloading", "transcribing", "embedding", "done", "error"]
+    status: Literal["pending", "downloading", "transcribing", "extracting_frames", "analyzing_frames", "embedding", "done", "error"]
     message: str = ""
     progress: int = 0
 

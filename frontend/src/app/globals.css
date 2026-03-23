@@ -4,14 +4,14 @@
 
 @layer base {
   body {
-    @apply bg-gray-950 text-gray-100;
+    @apply bg-[#0a0a0f] text-gray-100 antialiased;
   }
 }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -19,17 +19,17 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-700 rounded-full;
+  @apply bg-white/10 rounded-full;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-600;
+  @apply bg-white/20;
 }
 
 /* Firefox scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #374151 transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
 }
 
 /* Streaming cursor */
@@ -56,4 +56,42 @@
 
 .sources-appear {
   animation: sourcesAppear 0.3s ease-out;
+}
+
+/* Message entrance animation */
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-message-in {
+  animation: messageIn 0.3s ease-out;
+}
+
+/* Thinking pulse animation */
+@keyframes thinkingPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.thinking-pulse {
+  animation: thinkingPulse 1.5s ease-in-out infinite;
+}
+
+/* Subtle glow for focus states */
+.input-glow:focus {
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4), 0 0 20px -5px rgba(99, 102, 241, 0.15);
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }

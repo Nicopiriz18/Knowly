@@ -94,34 +94,39 @@ export default function Sidebar({
   const isAllSelected = selectedClass === null && selectedMateria === null;
 
   return (
-    <aside className="w-[280px] h-screen bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
+    <aside className="w-[272px] h-screen bg-[#0d0d14] border-r border-white/[0.06] flex flex-col shrink-0">
       {/* Header */}
-      <div className="p-5 border-b border-gray-800">
+      <div className="px-5 py-5 border-b border-white/[0.06]">
         <Link href="/" className="flex items-center gap-2.5">
-          <GraduationCap className="w-7 h-7 text-indigo-500" />
-          <h1 className="text-xl font-bold text-white">Knowly</h1>
+          <div className="w-8 h-8 rounded-xl bg-indigo-600/20 flex items-center justify-center">
+            <GraduationCap className="w-[18px] h-[18px] text-indigo-400" />
+          </div>
+          <h1 className="text-[15px] font-semibold text-white tracking-tight">Knowly</h1>
         </Link>
       </div>
 
       {/* Materia & class list */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+      <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
         {/* All option */}
         <button
           onClick={() => onSelectClass(null, null)}
-          className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2.5 transition-colors ${
+          className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all duration-150 ${
             isAllSelected
-              ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30"
-              : "text-gray-400 hover:bg-gray-800 hover:text-gray-200 border border-transparent"
+              ? "bg-white/[0.08] text-white"
+              : "text-gray-500 hover:bg-white/[0.04] hover:text-gray-300"
           }`}
         >
-          <BookOpen className="w-4 h-4 shrink-0" />
-          <span className="text-sm font-medium truncate">Todas las materias</span>
+          <BookOpen className="w-[15px] h-[15px] shrink-0" />
+          <span className="text-[13px] font-medium truncate">Todas las materias</span>
         </button>
+
+        {/* Divider */}
+        <div className="h-px bg-white/[0.06] my-2 !mt-2 !mb-2" />
 
         {/* Add materia */}
         {showNewMateria ? (
-          <div className="px-3 py-2">
-            <div className="flex items-center gap-2">
+          <div className="px-2 py-1.5">
+            <div className="flex items-center gap-1.5">
               <input
                 type="text"
                 value={newMateriaTitle}
@@ -133,14 +138,14 @@ export default function Sidebar({
                     setNewMateriaTitle("");
                   }
                 }}
-                placeholder="Nombre de la materia..."
+                placeholder="Nombre..."
                 autoFocus
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors min-w-0"
+                className="flex-1 bg-white/[0.06] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-[13px] text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500/50 input-glow transition-all min-w-0"
               />
               <button
                 onClick={handleCreateMateria}
                 disabled={creatingMateria || !newMateriaTitle.trim()}
-                className="p-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-lg transition-colors shrink-0"
+                className="p-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/[0.06] disabled:text-gray-600 text-white rounded-lg transition-colors shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -149,7 +154,7 @@ export default function Sidebar({
                   setShowNewMateria(false);
                   setNewMateriaTitle("");
                 }}
-                className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors shrink-0"
+                className="p-1.5 text-gray-600 hover:text-gray-400 transition-colors shrink-0"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -158,10 +163,10 @@ export default function Sidebar({
         ) : (
           <button
             onClick={() => setShowNewMateria(true)}
-            className="w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 text-gray-500 hover:bg-gray-800 hover:text-gray-300 border border-dashed border-gray-700 transition-colors"
+            className="w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 text-gray-600 hover:bg-white/[0.04] hover:text-gray-400 transition-all duration-150"
           >
-            <Plus className="w-4 h-4 shrink-0" />
-            <span className="text-sm font-medium">Agregar materia</span>
+            <Plus className="w-[15px] h-[15px] shrink-0" />
+            <span className="text-[13px] font-medium">Nueva materia</span>
           </button>
         )}
 
@@ -176,18 +181,18 @@ export default function Sidebar({
             <div key={mat.materia_id}>
               {/* Materia header */}
               <div
-                className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2 group transition-colors cursor-pointer ${
+                className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-1.5 group transition-all duration-150 cursor-pointer ${
                   isMateriaSelected
-                    ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30"
-                    : "text-gray-400 hover:bg-gray-800 hover:text-gray-200 border border-transparent"
+                    ? "bg-white/[0.08] text-white"
+                    : "text-gray-500 hover:bg-white/[0.04] hover:text-gray-300"
                 }`}
               >
                 <button
                   onClick={() => toggleExpand(mat.materia_id)}
-                  className="shrink-0"
+                  className="shrink-0 p-0.5"
                 >
                   <ChevronRight
-                    className={`w-3.5 h-3.5 transition-transform ${
+                    className={`w-3 h-3 transition-transform duration-200 ${
                       isExpanded ? "rotate-90" : ""
                     }`}
                   />
@@ -196,29 +201,29 @@ export default function Sidebar({
                   onClick={() => onSelectClass(null, mat.materia_id)}
                   className="flex-1 flex items-center gap-2 min-w-0"
                 >
-                  <FolderOpen className="w-4 h-4 shrink-0" />
-                  <span className="text-sm font-medium truncate">
+                  <FolderOpen className="w-[15px] h-[15px] shrink-0" />
+                  <span className="text-[13px] font-medium truncate">
                     {mat.title}
                   </span>
                 </button>
-                <span className="text-xs bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded shrink-0">
+                <span className="text-[11px] text-gray-600 tabular-nums shrink-0">
                   {matClasses.length}
                 </span>
                 <button
                   onClick={(e) => handleDeleteMateria(e, mat.materia_id)}
                   disabled={deleting === mat.materia_id}
-                  className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all shrink-0"
+                  className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all shrink-0 p-0.5"
                   title="Eliminar materia"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3 h-3" />
                 </button>
               </div>
 
               {/* Classes inside materia */}
               {isExpanded && (
-                <div className="ml-5 mt-0.5 space-y-0.5">
+                <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/[0.06] pl-2">
                   {matClasses.length === 0 ? (
-                    <p className="text-xs text-gray-600 px-3 py-1.5">
+                    <p className="text-[11px] text-gray-700 px-3 py-1.5">
                       Sin clases
                     </p>
                   ) : (
@@ -228,26 +233,26 @@ export default function Sidebar({
                         onClick={() =>
                           onSelectClass(cls.class_id, mat.materia_id)
                         }
-                        className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 group transition-colors ${
+                        className={`w-full text-left px-3 py-1.5 rounded-md flex items-center gap-2 group transition-all duration-150 ${
                           selectedClass === cls.class_id
-                            ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/20"
-                            : "text-gray-500 hover:bg-gray-800 hover:text-gray-300 border border-transparent"
+                            ? "bg-indigo-600/15 text-indigo-300"
+                            : "text-gray-600 hover:bg-white/[0.04] hover:text-gray-400"
                         }`}
                       >
-                        <BookOpen className="w-3.5 h-3.5 shrink-0" />
-                        <span className="text-xs font-medium truncate flex-1">
+                        <BookOpen className="w-3 h-3 shrink-0" />
+                        <span className="text-[12px] font-medium truncate flex-1">
                           {cls.class_title}
                         </span>
-                        <span className="text-[10px] bg-gray-800 text-gray-600 px-1 py-0.5 rounded shrink-0">
+                        <span className="text-[10px] text-gray-700 tabular-nums shrink-0">
                           {cls.chunk_count}
                         </span>
                         <button
                           onClick={(e) => handleDeleteClass(e, cls.class_id)}
                           disabled={deleting === cls.class_id}
-                          className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all shrink-0"
+                          className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all shrink-0"
                           title="Eliminar clase"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-2.5 h-2.5" />
                         </button>
                       </button>
                     ))
@@ -260,10 +265,10 @@ export default function Sidebar({
       </nav>
 
       {/* Bottom action */}
-      <div className="p-3 border-t border-gray-800">
+      <div className="p-3 border-t border-white/[0.06]">
         <Link
           href="/ingest"
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[13px] font-medium rounded-xl transition-all duration-150 hover:shadow-lg hover:shadow-indigo-600/10"
         >
           <Plus className="w-4 h-4" />
           Agregar clase
