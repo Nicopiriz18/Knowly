@@ -181,9 +181,9 @@ export default function IngestPage() {
                         onChange={(e) => setMateriaId(e.target.value)}
                         className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[13px] text-gray-100 focus:outline-none focus:border-indigo-500/40 input-glow transition-all"
                       >
-                        <option value="">Seleccionar materia...</option>
+                        <option value="" className="bg-gray-900 text-gray-100">Seleccionar materia...</option>
                         {materias.map((m) => (
-                          <option key={m.materia_id} value={m.materia_id}>
+                          <option key={m.materia_id} value={m.materia_id} className="bg-gray-900 text-gray-100">
                             {m.title}
                           </option>
                         ))}
