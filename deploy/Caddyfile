@@ -1,0 +1,12 @@
+# Caddy gets and renews Let's Encrypt certificates automatically for both domains.
+# The domains must point (DNS A record) to the server before starting.
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy frontend:3000
+}
+
+{$API_DOMAIN} {
+	# No compression here: it would buffer the chat's streamed (SSE) responses
+	reverse_proxy backend:8000
+}

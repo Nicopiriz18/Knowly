@@ -1,0 +1,55 @@
+# Production stack: Caddy (HTTPS) -> frontend + backend.
+# Usage on the server: docker compose -f docker-compose.prod.yml up -d --build
+# Only Caddy is reachable from the internet; backend and frontend stay on the internal network.
+services:
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:?set APP_DOMAIN in .env}
+      - API_DOMAIN=${API_DOMAIN:?set API_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      - DATA_DIR=/app/data
+      # Caddy is the only client that can reach the backend, so trust its X-Forwarded-For
+      - FORWARDED_ALLOW_IPS=*
+      - SMTP_HOST=
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the JS bundle at build time: rebuild after changing it.
+        - NEXT_PUBLIC_API_URL=https://${API_DOMAIN}
+    depends_on:
+      - backend
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,6 +1,9 @@
 FROM python:3.11-slim
 
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
+# yt-dlp needs a JavaScript runtime (Deno) to solve YouTube's JS challenges
+COPY --from=denoland/deno:bin-2.9.6 /deno /usr/local/bin/deno
 
 WORKDIR /app
 
