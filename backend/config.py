@@ -36,11 +36,14 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     otp_resend_cooldown_seconds: int = 60
 
-    # Email. If smtp_host is set, emails go to that SMTP server (e.g. MailDev in local dev).
+    # Email. If smtp_host is set, emails go to that SMTP server (MailDev in local dev,
+    # or e.g. Gmail with an app password in production when smtp_username is set).
     # Otherwise they are sent through Resend; if resend_api_key is also empty, they are
     # printed to the console (dev only).
     smtp_host: str = ""
     smtp_port: int = 1025
+    smtp_username: str = ""
+    smtp_password: str = ""
     resend_api_key: str = ""
     email_from: str = "Knowly <onboarding@resend.dev>"
     frontend_url: str = "http://localhost:3000"

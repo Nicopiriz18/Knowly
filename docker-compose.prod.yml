@@ -29,7 +29,6 @@ services:
       - DATA_DIR=/app/data
       # Caddy is the only client that can reach the backend, so trust its X-Forwarded-For
       - FORWARDED_ALLOW_IPS=*
-      - SMTP_HOST=
     volumes:
       - ./data:/app/data
     restart: unless-stopped

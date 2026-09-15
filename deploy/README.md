@@ -6,14 +6,18 @@ Todo corre en un solo VPS con Docker Compose:
 Internet ──► Caddy (80/443, HTTPS automático)
                ├── APP_DOMAIN ──► frontend (Next.js, :3000)
                └── API_DOMAIN ──► backend  (FastAPI, :8000) ──► ./data (SQLite, registros, transcripciones)
-                                     └──► OpenAI · Anthropic · Pinecone · Resend · YouTube
+                                     └──► OpenAI · Anthropic · Pinecone · Gmail · YouTube
 ```
 
-## 1. Dominio y email
+## 1. Email (Gmail, gratis)
 
-1. Comprá un dominio (Cloudflare Registrar, Namecheap, etc.).
-2. En [Resend](https://resend.com) agregá el dominio y cargá los registros DNS que te pide (SPF/DKIM). Esperá a que figure como *verified*.
-3. Creá una API key en Resend.
+Los códigos de acceso salen desde una cuenta de Gmail por SMTP (límite ≈500 mails por día).
+
+1. Usá una cuenta de Gmail dedicada (por ejemplo `knowly.app@gmail.com`).
+2. Activá la verificación en 2 pasos en esa cuenta.
+3. Creá una *contraseña de aplicación* en <https://myaccount.google.com/apppasswords> y guardá los 16 caracteres.
+
+> Si más adelante comprás un dominio, podés pasarte a Resend: dejá `SMTP_HOST` vacío y cargá `RESEND_API_KEY`.
 
 ## 2. Servidor
 
@@ -23,9 +27,9 @@ Internet ──► Caddy (80/443, HTTPS automático)
    - **Type:** CPX11 (2 vCPU / 2 GB) alcanza; CPX21 si procesás muchos videos.
    - **SSH key:** subí tu clave pública (`~/.ssh/id_ed25519.pub`). Sin clave no crees el servidor.
 2. Anotá la IP pública.
-3. En el DNS del dominio creá dos registros **A** apuntando a esa IP:
-   - `knowly.tudominio.com`
-   - `api.knowly.tudominio.com`
+3. Dominio gratis con [DuckDNS](https://www.duckdns.org): entrá con GitHub o Google, creá un subdominio (por ejemplo `knowly`) y en *current ip* poné la IP del servidor.
+   - La app queda en `knowly.duckdns.org`.
+   - La API en `api.knowly.duckdns.org`: DuckDNS resuelve cualquier sub-subdominio a la misma IP, no hay que configurar nada más.
 
 ## 3. Preparar el servidor
 
@@ -54,14 +58,17 @@ PINECONE_API_KEY=...
 JWT_SECRET=<python3 -c "import secrets; print(secrets.token_urlsafe(48))">
 ADMIN_EMAILS=tu@mail.com
 
-SMTP_HOST=
-RESEND_API_KEY=re_...
-EMAIL_FROM=Knowly <no-reply@tudominio.com>
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=knowly.app@gmail.com
+SMTP_PASSWORD=<contraseña de aplicación, sin espacios>
+EMAIL_FROM=Knowly <knowly.app@gmail.com>
+RESEND_API_KEY=
 
-APP_DOMAIN=knowly.tudominio.com
-API_DOMAIN=api.knowly.tudominio.com
-FRONTEND_URL=https://knowly.tudominio.com
-FRONTEND_ORIGINS=https://knowly.tudominio.com
+APP_DOMAIN=knowly.duckdns.org
+API_DOMAIN=api.knowly.duckdns.org
+FRONTEND_URL=https://knowly.duckdns.org
+FRONTEND_ORIGINS=https://knowly.duckdns.org
 ```
 
 `NEXT_PUBLIC_API_URL` y `FORWARDED_ALLOW_IPS` los define `docker-compose.prod.yml`; no hace falta cargarlos.
@@ -82,7 +89,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.prod.yml logs -f
 ```
 
-Abrí `https://knowly.tudominio.com`. La primera vez Caddy tarda unos segundos en sacar el certificado.
+Abrí `https://knowly.duckdns.org`. La primera vez Caddy tarda unos segundos en sacar el certificado.
 
 ## 7. Backups diarios
 
@@ -106,7 +113,8 @@ docker image prune -f
 
 ## Problemas comunes
 
-- **Caddy no obtiene certificado:** revisá que los registros A apunten a la IP (`dig +short api.knowly.tudominio.com`) y que los puertos 80/443 estén abiertos.
+- **Caddy no obtiene certificado:** revisá que los registros A apunten a la IP (`dig +short api.knowly.duckdns.org`) y que los puertos 80/443 estén abiertos.
+- **No llegan los mails:** revisá `docker compose -f docker-compose.prod.yml logs backend`. `535 Username and Password not accepted` significa que la contraseña de aplicación está mal o falta la verificación en 2 pasos. Mirá también la carpeta de spam.
 - **La ingesta falla con "Sign in to confirm you're not a bot":** YouTube bloquea IPs de datacenter. Exportá cookies de tu navegador (extensión *Get cookies.txt LOCALLY*) y pasáselas a yt-dlp con `--cookies` (requiere un cambio chico en `ingest_service.py`).
 - **Errores de CORS:** `FRONTEND_ORIGINS` tiene que ser exactamente `https://` + `APP_DOMAIN`, sin `/` final.
 - **Cambié `API_DOMAIN`:** hay que reconstruir el frontend (`up -d --build`), porque la URL queda embebida en el bundle.

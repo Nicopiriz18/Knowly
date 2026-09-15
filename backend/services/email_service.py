@@ -1,4 +1,4 @@
-"""Transactional emails sent through Resend."""
+"""Transactional emails sent through SMTP or Resend."""
 
 import html
 import logging
@@ -13,7 +13,8 @@ logger = logging.getLogger("knowly.email")
 
 
 def _send_smtp(to: str, subject: str, body_html: str) -> None:
-    """Dev mode: deliver to a local SMTP catcher such as MailDev."""
+    """Deliver through SMTP: a local catcher such as MailDev, or an authenticated
+    server such as Gmail (STARTTLS + login) when credentials are configured."""
     msg = EmailMessage()
     msg["From"] = settings.email_from
     msg["To"] = to
@@ -22,6 +23,9 @@ def _send_smtp(to: str, subject: str, body_html: str) -> None:
     msg.add_alternative(body_html, subtype="html")
 
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
+        if settings.smtp_username:
+            smtp.starttls()
+            smtp.login(settings.smtp_username, settings.smtp_password)
         smtp.send_message(msg)
     logger.info("Email to %s sent to SMTP %s:%s | %s", to, settings.smtp_host, settings.smtp_port, subject)
 
