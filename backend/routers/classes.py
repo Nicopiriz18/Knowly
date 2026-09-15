@@ -2,9 +2,10 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from config import settings
+from deps import CurrentUser, get_current_user
 from schemas import ClassInfo
 from services.class_service import list_classes as get_all_classes, delete_class as remove_class_registry
 from services.pinecone_client import get_index
@@ -13,9 +14,9 @@ router = APIRouter()
 
 
 @router.get("", response_model=list[ClassInfo])
-def list_classes(materia_id: str | None = None):
-    """List all indexed classes with their chunk counts, optionally filtered by materia."""
-    classes = get_all_classes(materia_id)
+def list_classes(materia_id: str | None = None, user: CurrentUser = Depends(get_current_user)):
+    """List the user's indexed classes with their chunk counts, optionally filtered by materia."""
+    classes = get_all_classes(user.email, materia_id)
     return [
         ClassInfo(
             class_id=c["class_id"],
@@ -29,9 +30,9 @@ def list_classes(materia_id: str | None = None):
 
 
 @router.delete("/{class_id}")
-def delete_class(class_id: str):
+def delete_class(class_id: str, user: CurrentUser = Depends(get_current_user)):
     """Delete all chunks for a given class_id."""
-    if not remove_class_registry(class_id):
+    if not remove_class_registry(class_id, user.email):
         raise HTTPException(status_code=404, detail=f"Class '{class_id}' not found.")
 
     # Delete vectors from Pinecone

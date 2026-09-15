@@ -1,6 +1,45 @@
 from typing import Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+
+# ---------------------------------------------------------------------------
+# Auth & admin
+# ---------------------------------------------------------------------------
+
+class LoginStartRequest(BaseModel):
+    email: EmailStr
+
+
+class LoginStartResponse(BaseModel):
+    status: Literal["otp_sent", "pending"]
+
+
+class LoginVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class LoginVerifyResponse(BaseModel):
+    token: str
+
+
+class MeResponse(BaseModel):
+    email: str
+    is_admin: bool
+
+
+class UserInfo(BaseModel):
+    email: str
+    status: Literal["pending", "approved", "rejected"]
+    created_at: float
+    decided_at: float | None = None
+    is_admin: bool = False
+
+
+class UpdateUserStatusRequest(BaseModel):
+    status: Literal["approved", "rejected"]
 
 
 # ---------------------------------------------------------------------------
@@ -8,7 +47,7 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------------
 
 class CreateMateriaRequest(BaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=120)
 
 
 class MateriaInfo(BaseModel):
@@ -33,10 +72,22 @@ class ClassInfo(BaseModel):
 # Ingest
 # ---------------------------------------------------------------------------
 
+_YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
+
+
 class IngestRequest(BaseModel):
     url: str
-    title: str
+    title: str = Field(min_length=1, max_length=200)
     materia_id: str
+
+    @field_validator("url")
+    @classmethod
+    def _youtube_only(cls, v: str) -> str:
+        v = v.strip()
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https") or (parsed.hostname or "").lower() not in _YOUTUBE_HOSTS:
+            raise ValueError("La URL debe ser un video de YouTube.")
+        return v
 
 
 class IngestResponse(BaseModel):
@@ -54,7 +105,7 @@ class IngestStatus(BaseModel):
 # ---------------------------------------------------------------------------
 
 class ChatRequest(BaseModel):
-    query: str
+    query: str = Field(min_length=1, max_length=2000)
     class_id: str | None = None
     materia_id: str | None = None
 

@@ -3,13 +3,13 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from config import settings
+from deps import CurrentUser, get_current_user
 from schemas import CreateMateriaRequest, MateriaInfo
 from services.materia_service import (
     list_materias,
-    get_materia,
     create_materia,
     delete_materia,
 )
@@ -20,9 +20,9 @@ router = APIRouter()
 
 
 @router.get("", response_model=list[MateriaInfo])
-def list_all_materias():
-    """List all materias with their class counts."""
-    materias = list_materias()
+def list_all_materias(user: CurrentUser = Depends(get_current_user)):
+    """List the user's materias with their class counts."""
+    materias = list_materias(user.email)
     return [
         MateriaInfo(
             materia_id=m["materia_id"],
@@ -34,17 +34,17 @@ def list_all_materias():
 
 
 @router.post("", response_model=MateriaInfo)
-def create_new_materia(request: CreateMateriaRequest):
+def create_new_materia(request: CreateMateriaRequest, user: CurrentUser = Depends(get_current_user)):
     """Create a new materia with an auto-generated ID."""
     materia_id = str(uuid4())[:8]
-    result = create_materia(materia_id, request.title)
+    result = create_materia(materia_id, request.title, user.email)
     return MateriaInfo(materia_id=result["materia_id"], title=result["title"], class_count=0)
 
 
 @router.delete("/{materia_id}")
-def delete_existing_materia(materia_id: str):
+def delete_existing_materia(materia_id: str, user: CurrentUser = Depends(get_current_user)):
     """Delete a materia and all its classes."""
-    if not delete_materia(materia_id):
+    if not delete_materia(materia_id, user.email):
         raise HTTPException(status_code=404, detail=f"Materia '{materia_id}' not found.")
 
     # Delete vectors from Pinecone

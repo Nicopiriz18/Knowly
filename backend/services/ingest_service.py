@@ -18,6 +18,7 @@ from services.class_service import register_class
 
 # In-memory job tracker
 jobs: dict[str, IngestStatus] = {}
+job_owners: dict[str, str] = {}
 
 
 def _find_ytdlp() -> str:
@@ -55,9 +56,10 @@ def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str]:
     audio_path = audio_dir / f"{class_id}.mp3"
     ytdlp = _find_ytdlp()
 
+    # "--" ends option parsing so the URL can never be interpreted as a yt-dlp flag.
     # Extract video info to get the YouTube video ID
     result = subprocess.run(
-        [ytdlp, "--dump-json", "--no-download", url],
+        [ytdlp, "--dump-json", "--no-download", "--no-playlist", "--", url],
         check=True,
         capture_output=True,
         text=True,
@@ -69,7 +71,7 @@ def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str]:
         # Audio-only download (original behavior)
         if not audio_path.exists():
             subprocess.run(
-                [ytdlp, "-x", "--audio-format", "mp3", "-o", str(audio_path), url],
+                [ytdlp, "-x", "--audio-format", "mp3", "--no-playlist", "-o", str(audio_path), "--", url],
                 check=True,
             )
         return audio_path, None, video_id
@@ -85,21 +87,65 @@ def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str]:
                 ytdlp,
                 "-f", "bestvideo[height<=480]+bestaudio/best[height<=480]",
                 "--merge-output-format", "mp4",
+                "--no-playlist",
                 "-o", str(video_path),
-                url,
+                "--", url,
             ],
             check=True,
         )
 
-    # Extract audio from video with ffmpeg
+    # Extract audio from video with ffmpeg (mono 16 kHz 32 kbps is enough for speech
+    # and keeps the file under the Whisper API upload limit)
     if not audio_path.exists():
         ffmpeg = _find_ffmpeg()
         subprocess.run(
-            [ffmpeg, "-i", str(video_path), "-q:a", "0", "-map", "a", str(audio_path), "-y"],
+            [ffmpeg, "-i", str(video_path), "-map", "a", "-ac", "1", "-ar", "16000", "-b:a", "32k", str(audio_path), "-y"],
             check=True,
         )
 
     return audio_path, video_path, video_id
+
+
+# Whisper API rejects uploads over 25 MB; leave some margin
+_WHISPER_MAX_BYTES = 24 * 1024 * 1024
+_TRANSCRIBE_CHUNK_SECONDS = 20 * 60
+
+
+def _split_audio(audio_path: Path, class_id: str) -> list[tuple[Path, float]]:
+    """Split audio into fixed-length chunks. Returns (chunk_path, start_offset_seconds)."""
+    ffmpeg = _find_ffmpeg()
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        raise RuntimeError("ffprobe not found. Make sure it is installed and on PATH.")
+
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(audio_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    duration = float(probe.stdout.strip())
+
+    chunks_dir = audio_path.parent / f"{class_id}_chunks"
+    chunks_dir.mkdir(exist_ok=True)
+
+    chunks = []
+    offset = 0.0
+    while offset < duration:
+        chunk_path = chunks_dir / f"{len(chunks):03d}.mp3"
+        subprocess.run(
+            [
+                ffmpeg, "-ss", str(offset), "-t", str(_TRANSCRIBE_CHUNK_SECONDS),
+                "-i", str(audio_path), "-ac", "1", "-ar", "16000", "-b:a", "32k",
+                str(chunk_path), "-y",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        chunks.append((chunk_path, offset))
+        offset += _TRANSCRIBE_CHUNK_SECONDS
+
+    return chunks
 
 
 def _transcribe(audio_path: Path, class_id: str) -> list[dict]:
@@ -114,18 +160,27 @@ def _transcribe(audio_path: Path, class_id: str) -> list[dict]:
 
     client = openai.OpenAI(api_key=settings.openai_api_key)
 
-    with open(audio_path, "rb") as audio_file:
-        result = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_file,
-            response_format="verbose_json",
-            timestamp_granularities=["segment"],
-        )
+    if audio_path.stat().st_size <= _WHISPER_MAX_BYTES:
+        audio_chunks = [(audio_path, 0.0)]
+    else:
+        audio_chunks = _split_audio(audio_path, class_id)
 
-    segments = [
-        {"start": s.start, "end": s.end, "text": s.text.strip()}
-        for s in result.segments
-    ]
+    segments = []
+    try:
+        for chunk_path, offset in audio_chunks:
+            with open(chunk_path, "rb") as audio_file:
+                result = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="verbose_json",
+                    timestamp_granularities=["segment"],
+                )
+            segments.extend(
+                {"start": s.start + offset, "end": s.end + offset, "text": s.text.strip()}
+                for s in result.segments
+            )
+    finally:
+        shutil.rmtree(audio_path.parent / f"{class_id}_chunks", ignore_errors=True)
 
     with open(transcript_path, "w", encoding="utf-8") as f:
         json.dump(segments, f, ensure_ascii=False, indent=2)
@@ -354,7 +409,7 @@ def _build_chunks(
     return chunks
 
 
-def _embed_and_store(chunks: list[dict]) -> None:
+def _embed_and_store(chunks: list[dict], owner: str) -> None:
     """Generate embeddings and store in Pinecone."""
     client = openai.OpenAI(api_key=settings.openai_api_key)
     index = get_index()
@@ -396,6 +451,7 @@ def _embed_and_store(chunks: list[dict]) -> None:
             source_url=c["source_url"],
             materia_id=c["materia_id"],
             chunk_count=len(chunks),
+            owner=owner,
         )
 
 
@@ -409,7 +465,7 @@ def _cleanup_video_files(class_id: str, video_path: Path | None) -> None:
         shutil.rmtree(frames_dir)
 
 
-def run_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str) -> None:
+def run_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str, owner: str) -> None:
     """Run the full ingest pipeline, updating job status at each phase."""
     try:
         # Phase 1: Download
@@ -444,7 +500,7 @@ def run_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str
         if visual_descriptions:
             chunks = _merge_visual_descriptions(chunks, visual_descriptions)
 
-        _embed_and_store(chunks)
+        _embed_and_store(chunks, owner)
 
         # Done
         jobs[job_id] = IngestStatus(status="done", message=f"Ingested {len(chunks)} chunks successfully.", progress=100)
@@ -453,8 +509,11 @@ def run_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str
         jobs[job_id] = IngestStatus(status="error", message=str(e), progress=0)
 
 
-def start_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str) -> None:
+def start_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str, owner: str) -> None:
     """Start the ingest pipeline in a background thread."""
     jobs[job_id] = IngestStatus(status="pending", message="Job queued.", progress=0)
-    thread = threading.Thread(target=run_ingest, args=(job_id, url, title, class_id, materia_id), daemon=True)
+    job_owners[job_id] = owner
+    thread = threading.Thread(
+        target=run_ingest, args=(job_id, url, title, class_id, materia_id, owner), daemon=True
+    )
     thread.start()

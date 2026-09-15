@@ -13,6 +13,9 @@ chroma_db/
 data/audio/
 data/transcripts/*.json
 data/raw_videos/
+data/*.db
+data/*.db-wal
+data/*.db-shm
 
 # Python
 __pycache__/
@@ -43,3 +46,4 @@ docker-compose.override.yml
 # OS
 .DS_Store
 Thumbs.db
+data/visual/*.json

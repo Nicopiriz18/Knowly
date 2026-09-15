@@ -9,9 +9,12 @@ import {
   ChevronRight,
   FolderOpen,
   X,
+  LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 interface SidebarProps {
   materias: MateriaInfo[];
@@ -30,6 +33,7 @@ export default function Sidebar({
   onSelectClass,
   onRefresh,
 }: SidebarProps) {
+  const { user, logout } = useAuth();
   const [deleting, setDeleting] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showNewMateria, setShowNewMateria] = useState(false);
@@ -268,6 +272,29 @@ export default function Sidebar({
           <Plus className="w-4 h-4" />
           Agregar clase
         </Link>
+        {user?.is_admin && (
+          <Link
+            href="/admin"
+            className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2 text-gray-400 hover:bg-gray-800 hover:text-gray-200 text-sm font-medium rounded-lg transition-colors"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Solicitudes de acceso
+          </Link>
+        )}
+        {user && (
+          <div className="mt-2 flex items-center gap-2 px-2 pt-2 border-t border-gray-800">
+            <span className="flex-1 text-xs text-gray-500 truncate" title={user.email}>
+              {user.email}
+            </span>
+            <button
+              onClick={logout}
+              className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors"
+              title="Cerrar sesión"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

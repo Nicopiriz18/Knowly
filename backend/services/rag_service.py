@@ -64,6 +64,7 @@ GRADE_PROMPT = ChatPromptTemplate.from_messages([
 
 class RAGState(TypedDict):
     query: str
+    owner: str
     class_id: str | None
     materia_id: str | None
     documents: list[Document]
@@ -78,6 +79,7 @@ class RAGState(TypedDict):
 
 def _search_pinecone(
     query: str,
+    owner: str,
     class_id: str | None = None,
     materia_id: str | None = None,
     n_results: int = 4,
@@ -87,7 +89,13 @@ def _search_pinecone(
 
     When searching by materia_id, retrieves top chunks from each class
     separately to ensure coverage across all classes in the materia.
+    Callers must verify that class_id / materia_id belong to `owner`;
+    unscoped searches are restricted to the owner's classes.
     """
+    owned_class_ids = [c["class_id"] for c in list_classes(owner)]
+    if not owned_class_ids:
+        return []
+
     from langchain_openai import OpenAIEmbeddings
 
     embeddings = OpenAIEmbeddings(
@@ -101,7 +109,7 @@ def _search_pinecone(
     # When querying by materia, search per-class to ensure diversity
     if materia_id is not None and class_id is None:
         return _search_per_class(
-            index, query_embedding, materia_id, per_class_results
+            index, query_embedding, owner, materia_id, per_class_results
         )
 
     query_params: dict = {
@@ -111,6 +119,8 @@ def _search_pinecone(
     }
     if class_id is not None:
         query_params["filter"] = {"class_id": {"$eq": class_id}}
+    else:
+        query_params["filter"] = {"class_id": {"$in": owned_class_ids}}
 
     results = index.query(**query_params)
 
@@ -125,12 +135,13 @@ def _search_pinecone(
 def _search_per_class(
     index,
     query_embedding: list[float],
+    owner: str,
     materia_id: str,
     per_class: int = 2,
 ) -> list[Document]:
     """Retrieve top chunks from each class in a materia for broad coverage."""
     # Discover class_ids from the JSON registry
-    classes = list_classes(materia_id)
+    classes = list_classes(owner, materia_id)
     class_ids = [c["class_id"] for c in classes]
 
     if not class_ids:
@@ -245,6 +256,7 @@ def retrieve(state: RAGState) -> dict:
 
     docs = _search_pinecone(
         state["query"],
+        owner=state["owner"],
         class_id=state.get("class_id"),
         materia_id=state.get("materia_id"),
         n_results=n_results,
@@ -302,9 +314,10 @@ def generate(state: RAGState) -> dict:
     max_tokens = settings.broad_max_tokens if query_type == "broad" else 1024
 
     llm = ChatAnthropic(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-5",
         api_key=settings.anthropic_api_key,
         max_tokens=max_tokens,
+        thinking={"type": "disabled"},
     )
 
     result = llm.invoke([
@@ -358,12 +371,14 @@ rag_graph = build_rag_graph()
 
 async def query_rag(
     query: str,
+    owner: str,
     class_id: str | None = None,
     materia_id: str | None = None,
 ) -> tuple[str, list[Source]]:
     """Answer a question using the RAG graph. Returns (answer_text, sources)."""
     result = await rag_graph.ainvoke({
         "query": query,
+        "owner": owner,
         "class_id": class_id,
         "materia_id": materia_id,
         "documents": [],
@@ -376,6 +391,7 @@ async def query_rag(
 
 async def query_rag_stream(
     query: str,
+    owner: str,
     class_id: str | None = None,
     materia_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
@@ -392,7 +408,7 @@ async def query_rag_stream(
         n_results = 4
 
     docs = _search_pinecone(
-        query, class_id=class_id, materia_id=materia_id,
+        query, owner=owner, class_id=class_id, materia_id=materia_id,
         n_results=n_results, per_class_results=per_class,
     )
 
@@ -409,6 +425,7 @@ async def query_rag_stream(
         # Grade documents only for specific queries
         state: RAGState = {
             "query": query,
+            "owner": owner,
             "class_id": class_id,
             "materia_id": materia_id,
             "documents": docs,
@@ -431,9 +448,10 @@ async def query_rag_stream(
     max_tokens = settings.broad_max_tokens if query_type == "broad" else 1024
 
     llm = ChatAnthropic(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-5",
         api_key=settings.anthropic_api_key,
         max_tokens=max_tokens,
+        thinking={"type": "disabled"},
     )
 
     async for chunk in llm.astream([

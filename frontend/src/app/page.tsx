@@ -7,7 +7,8 @@ import {
   Source,
   getClasses,
   getMaterias,
-  API,
+  chat,
+  chatStream,
 } from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
 import ChatMessage from "@/components/ChatMessage";
@@ -82,20 +83,10 @@ export default function Home() {
     setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
 
-    try {
-      const res = await fetch(`${API}/chat/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query,
-          class_id: selectedClass,
-          materia_id: selectedClass ? null : selectedMateria,
-        }),
-      });
+    const scopeMateria = selectedClass ? null : selectedMateria;
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+    try {
+      const res = await chatStream(query, selectedClass, scopeMateria);
 
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
@@ -169,19 +160,14 @@ export default function Home() {
 
       flushToUI();
       setIsStreaming(false);
-    } catch {
+    } catch (streamErr) {
       setIsStreaming(false);
+      // fetch throws TypeError on network failures; anything else is an API error
+      // (rate limit, not found...) that retrying without streaming won't fix.
+      const isNetworkError = streamErr instanceof TypeError;
       try {
-        const res = await fetch(`${API}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query,
-            class_id: selectedClass,
-            materia_id: selectedClass ? null : selectedMateria,
-          }),
-        });
-        const data = await res.json();
+        if (!isNetworkError) throw streamErr;
+        const data = await chat(query, selectedClass, scopeMateria);
         setMessages((prev) => {
           const filtered = prev.filter(
             (m, i) =>
@@ -196,20 +182,17 @@ export default function Home() {
             },
           ];
         });
-      } catch {
+      } catch (err) {
+        const content =
+          !isNetworkError && err instanceof Error
+            ? err.message
+            : "Lo siento, no pude conectar con el servidor. Verifica que el backend este corriendo.";
         setMessages((prev) => {
           const filtered = prev.filter(
             (m, i) =>
               !(i === prev.length - 1 && m.role === "assistant" && !m.content)
           );
-          return [
-            ...filtered,
-            {
-              role: "assistant",
-              content:
-                "Lo siento, no pude conectar con el servidor. Verifica que el backend este corriendo.",
-            },
-          ];
+          return [...filtered, { role: "assistant", content }];
         });
       }
     } finally {
