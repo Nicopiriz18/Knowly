@@ -23,6 +23,9 @@ interface SidebarProps {
   selectedMateria: string | null;
   onSelectClass: (classId: string | null, materiaId: string | null) => void;
   onRefresh: () => void;
+  // Mobile drawer state (the sidebar is always visible from md up)
+  open: boolean;
+  onClose: () => void;
 }
 
 export default function Sidebar({
@@ -32,6 +35,8 @@ export default function Sidebar({
   selectedMateria,
   onSelectClass,
   onRefresh,
+  open,
+  onClose,
 }: SidebarProps) {
   const { user, logout } = useAuth();
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -92,26 +97,50 @@ export default function Sidebar({
     }
   };
 
+  const select = (classId: string | null, materiaId: string | null) => {
+    onSelectClass(classId, materiaId);
+    onClose();
+  };
+
   const classesByMateria = (materiaId: string) =>
     classes.filter((c) => c.materia_id === materiaId);
 
   const isAllSelected = selectedClass === null && selectedMateria === null;
 
   return (
-    <aside className="w-[280px] h-screen bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
+    <>
+    {/* Backdrop (mobile drawer) */}
+    <div
+      onClick={onClose}
+      className={`fixed inset-0 z-30 bg-black/60 transition-opacity md:hidden ${
+        open ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}
+    />
+    <aside
+      className={`fixed inset-y-0 left-0 z-40 w-[280px] max-w-[85vw] bg-gray-900 border-r border-gray-800 flex flex-col shrink-0 transition-[transform,visibility] duration-200 md:static md:h-dvh md:max-w-none md:visible md:translate-x-0 ${
+        open ? "translate-x-0" : "-translate-x-full invisible"
+      }`}
+    >
       {/* Header */}
-      <div className="p-5 border-b border-gray-800">
+      <div className="p-5 border-b border-gray-800 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
           <GraduationCap className="w-7 h-7 text-indigo-500" />
           <h1 className="text-xl font-bold text-white">Knowly</h1>
         </Link>
+        <button
+          onClick={onClose}
+          className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors md:hidden"
+          title="Cerrar menú"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
       {/* Materia & class list */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-1">
         {/* All option */}
         <button
-          onClick={() => onSelectClass(null, null)}
+          onClick={() => select(null, null)}
           className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2.5 transition-colors ${
             isAllSelected
               ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30"
@@ -139,7 +168,7 @@ export default function Sidebar({
                 }}
                 placeholder="Nombre de la materia..."
                 autoFocus
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors min-w-0"
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors min-w-0"
               />
               <button
                 onClick={handleCreateMateria}
@@ -197,7 +226,7 @@ export default function Sidebar({
                   />
                 </button>
                 <button
-                  onClick={() => onSelectClass(null, mat.materia_id)}
+                  onClick={() => select(null, mat.materia_id)}
                   className="flex-1 flex items-center gap-2 min-w-0"
                 >
                   <FolderOpen className="w-4 h-4 shrink-0" />
@@ -211,7 +240,7 @@ export default function Sidebar({
                 <button
                   onClick={(e) => handleDeleteMateria(e, mat.materia_id)}
                   disabled={deleting === mat.materia_id}
-                  className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all shrink-0"
+                  className="p-1 -m-1 md:opacity-0 md:group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all shrink-0"
                   title="Eliminar materia"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -230,7 +259,7 @@ export default function Sidebar({
                       <button
                         key={cls.class_id}
                         onClick={() =>
-                          onSelectClass(cls.class_id, mat.materia_id)
+                          select(cls.class_id, mat.materia_id)
                         }
                         className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 group transition-colors ${
                           selectedClass === cls.class_id
@@ -248,7 +277,7 @@ export default function Sidebar({
                         <button
                           onClick={(e) => handleDeleteClass(e, cls.class_id)}
                           disabled={deleting === cls.class_id}
-                          className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all shrink-0"
+                          className="p-1 -m-1 md:opacity-0 md:group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all shrink-0"
                           title="Eliminar clase"
                         >
                           <Trash2 className="w-3 h-3" />
@@ -297,5 +326,6 @@ export default function Sidebar({
         )}
       </div>
     </aside>
+    </>
   );
 }

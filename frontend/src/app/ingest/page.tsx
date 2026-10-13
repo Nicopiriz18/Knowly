@@ -23,6 +23,7 @@ import {
   Plus,
   Video,
   Eye,
+  Menu,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -45,6 +46,7 @@ export default function IngestPage() {
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [selectedMateria, setSelectedMateria] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Form
   const [url, setUrl] = useState("");
@@ -137,7 +139,7 @@ export default function IngestPage() {
   const currentStepIndex = status ? getStepIndex(status.status) : -1;
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-dvh">
       <Sidebar
         materias={materias}
         classes={classes}
@@ -148,10 +150,24 @@ export default function IngestPage() {
           setSelectedMateria(mId);
         }}
         onRefresh={fetchData}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
-      <main className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
-        <div className="w-full max-w-lg">
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        {/* Mobile top bar */}
+        <header className="h-14 border-b border-gray-800 flex items-center gap-2 px-3 shrink-0 bg-gray-950 md:hidden">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 text-gray-400 hover:text-gray-200 transition-colors"
+            title="Abrir menú"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <h2 className="text-sm font-medium text-gray-300">Agregar clase</h2>
+        </header>
+
+        <div className="w-full max-w-lg m-auto p-4 md:p-8">
           {/* Back link */}
           <Link
             href="/"
@@ -162,7 +178,7 @@ export default function IngestPage() {
           </Link>
 
           {/* Form card */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-6">
             <h2 className="text-xl font-semibold text-white mb-6">
               Agregar nueva clase
             </h2>
@@ -179,7 +195,7 @@ export default function IngestPage() {
                       <select
                         value={materiaId}
                         onChange={(e) => setMateriaId(e.target.value)}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-base md:text-sm text-gray-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                       >
                         <option value="">Seleccionar materia...</option>
                         {materias.map((m) => (
@@ -204,7 +220,7 @@ export default function IngestPage() {
                         value={newMateriaTitle}
                         onChange={(e) => setNewMateriaTitle(e.target.value)}
                         placeholder="Ej: Calculo II"
-                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                       />
                       <button
                         type="button"
@@ -230,7 +246,7 @@ export default function IngestPage() {
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="https://www.youtube.com/watch?v=..."
                     required
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                   />
                 </div>
 
@@ -244,7 +260,7 @@ export default function IngestPage() {
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Ej: Clase 5 - Integrales"
                     required
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                   />
                 </div>
 

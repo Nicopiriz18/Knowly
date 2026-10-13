@@ -58,7 +58,7 @@ export default function AdminPage() {
   const visible = users.filter((u) => u.status === tab);
 
   return (
-    <main className="min-h-screen p-6 md:p-10">
+    <main className="min-h-dvh p-4 md:p-10">
       <div className="max-w-3xl mx-auto">
         <Link
           href="/"
@@ -78,7 +78,7 @@ export default function AdminPage() {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`flex-1 md:flex-none px-1 md:px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
                 tab === t.key
                   ? "border-indigo-500 text-indigo-400"
                   : "border-transparent text-gray-500 hover:text-gray-300"

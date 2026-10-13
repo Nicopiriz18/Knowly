@@ -24,8 +24,8 @@ export default function ChatMessage({ role, content, sources, isStreaming }: Cha
   if (isUser) {
     return (
       <div className="flex justify-end mb-5">
-        <div className="max-w-[70%]">
-          <div className="px-4 py-2.5 rounded-2xl rounded-br-sm bg-indigo-600 text-white text-sm leading-relaxed whitespace-pre-wrap">
+        <div className="max-w-[85%] md:max-w-[70%]">
+          <div className="px-4 py-2.5 rounded-2xl rounded-br-sm bg-indigo-600 text-white text-sm leading-relaxed whitespace-pre-wrap break-words">
             {content}
           </div>
         </div>
@@ -35,7 +35,7 @@ export default function ChatMessage({ role, content, sources, isStreaming }: Cha
 
   return (
     <div className="mb-6">
-      <div className="flex items-start gap-3 max-w-[85%]">
+      <div className="flex items-start gap-2.5 md:gap-3 md:max-w-[85%]">
         {/* Avatar */}
         <div className="w-7 h-7 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center shrink-0 mt-0.5">
           <Bot className="w-4 h-4 text-indigo-400" />
@@ -43,7 +43,7 @@ export default function ChatMessage({ role, content, sources, isStreaming }: Cha
 
         {/* Content */}
         <div className="min-w-0 flex-1">
-          <div className="prose-chat text-sm text-gray-200 leading-relaxed">
+          <div className="prose-chat text-sm text-gray-200 leading-relaxed break-words">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -101,6 +101,11 @@ export default function ChatMessage({ role, content, sources, isStreaming }: Cha
                   <blockquote className="border-l-2 border-indigo-500/50 pl-3 text-gray-400 italic mb-3">
                     {children}
                   </blockquote>
+                ),
+                table: ({ children }) => (
+                  <div className="overflow-x-auto mb-3">
+                    <table>{children}</table>
+                  </div>
                 ),
                 hr: () => <hr className="border-gray-800 my-4" />,
                 a: ({ href, children }) => (

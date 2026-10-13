@@ -12,7 +12,7 @@ import {
 } from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
 import ChatMessage from "@/components/ChatMessage";
-import { Send, GraduationCap } from "lucide-react";
+import { Send, GraduationCap, Menu } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -29,6 +29,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchData = useCallback(async () => {
@@ -208,7 +209,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-dvh">
       <Sidebar
         materias={materias}
         classes={classes}
@@ -216,19 +217,28 @@ export default function Home() {
         selectedMateria={selectedMateria}
         onSelectClass={handleSelectClass}
         onRefresh={fetchData}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       {/* Chat area */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-14 border-b border-gray-800 flex items-center px-5 shrink-0 bg-gray-950">
+        <header className="h-14 border-b border-gray-800 flex items-center gap-2 px-3 md:px-5 shrink-0 bg-gray-950">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 text-gray-400 hover:text-gray-200 transition-colors md:hidden"
+            title="Abrir menú"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
           <h2 className="text-sm font-medium text-gray-300 truncate">
             {headerLabel}
           </h2>
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto p-4 md:p-5">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <GraduationCap className="w-16 h-16 text-gray-700 mb-4" />
@@ -283,13 +293,13 @@ export default function Home() {
         </div>
 
         {/* Input */}
-        <div className="p-4 border-t border-gray-800 bg-gray-950">
+        <div className="p-3 md:p-4 border-t border-gray-800 bg-gray-950">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               sendMessage();
             }}
-            className="flex items-end gap-3 max-w-3xl mx-auto"
+            className="flex items-end gap-2 md:gap-3 max-w-3xl mx-auto"
           >
             <textarea
               value={input}
@@ -297,7 +307,7 @@ export default function Home() {
               onKeyDown={handleKeyDown}
               placeholder="Escribe tu pregunta..."
               rows={1}
-              className="flex-1 resize-none bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+              className="flex-1 resize-none bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
             />
             <button
               type="submit"

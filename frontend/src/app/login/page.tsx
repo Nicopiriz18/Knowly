@@ -10,7 +10,7 @@ import { useAuth } from "@/components/AuthProvider";
 type Step = "email" | "code" | "pending";
 
 const inputClass =
-  "w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors";
+  "w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -72,7 +72,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
+    <main className="min-h-dvh flex items-center justify-center p-4 md:p-6">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2.5 mb-8">
           <GraduationCap className="w-8 h-8 text-indigo-500" />
