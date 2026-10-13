@@ -1,4 +1,4 @@
-# Deploy en Hetzner
+# Deploy en DigitalOcean
 
 Todo corre en un solo VPS con Docker Compose:
 
@@ -9,23 +9,23 @@ Internet ──► Caddy (80/443, HTTPS automático)
                                      └──► OpenAI · Anthropic · Pinecone · Gmail · YouTube
 ```
 
-## 1. Email (Gmail, gratis)
+## 1. Email (Brevo, gratis)
 
-Los códigos de acceso salen desde una cuenta de Gmail por SMTP (límite ≈500 mails por día).
+DigitalOcean bloquea los puertos SMTP 25, 465 y 587, así que Gmail directo no funciona desde el droplet. Los códigos de acceso salen por [Brevo](https://www.brevo.com) (300 mails por día gratis), que acepta SMTP por el puerto 2525.
 
-1. Usá una cuenta de Gmail dedicada (por ejemplo `knowly.app@gmail.com`).
-2. Activá la verificación en 2 pasos en esa cuenta.
-3. Creá una *contraseña de aplicación* en <https://myaccount.google.com/apppasswords> y guardá los 16 caracteres.
+1. Creá una cuenta en Brevo y verificá el teléfono.
+2. En *Senders, domains, IPs → Senders*, verificá la dirección remitente (por ejemplo `knowly.app@gmail.com`).
+3. En *SMTP & API → SMTP*, copiá el **Login** y generá una **SMTP key**.
 
 > Si más adelante comprás un dominio, podés pasarte a Resend: dejá `SMTP_HOST` vacío y cargá `RESEND_API_KEY`.
 
 ## 2. Servidor
 
-1. En la [consola de Hetzner](https://console.hetzner.cloud) creá un servidor:
-   - **Location:** Ashburn (US East), la más cercana a Sudamérica.
-   - **Image:** Ubuntu 24.04.
-   - **Type:** CPX11 (2 vCPU / 2 GB) alcanza; CPX21 si procesás muchos videos.
-   - **SSH key:** subí tu clave pública (`~/.ssh/id_ed25519.pub`). Sin clave no crees el servidor.
+1. En [DigitalOcean](https://cloud.digitalocean.com) creá un droplet (*Create → Droplets*):
+   - **Region:** New York, la más cercana a Sudamérica.
+   - **Image:** Ubuntu 24.04 (LTS).
+   - **Size:** Basic, 2 GB / 1 vCPU alcanza; 4 GB si procesás muchos videos.
+   - **Authentication:** SSH Key, y pegá tu clave pública (`~/.ssh/id_ed25519.pub`). No uses contraseña.
 2. Anotá la IP pública.
 3. Dominio gratis con [DuckDNS](https://www.duckdns.org): entrá con GitHub o Google, creá un subdominio (por ejemplo `knowly`) y en *current ip* poné la IP del servidor.
    - La app queda en `knowly.duckdns.org`.
@@ -58,10 +58,10 @@ PINECONE_API_KEY=...
 JWT_SECRET=<python3 -c "import secrets; print(secrets.token_urlsafe(48))">
 ADMIN_EMAILS=tu@mail.com
 
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=knowly.app@gmail.com
-SMTP_PASSWORD=<contraseña de aplicación, sin espacios>
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=2525
+SMTP_USERNAME=<Login de Brevo, termina en @smtp-brevo.com>
+SMTP_PASSWORD=<SMTP key de Brevo>
 EMAIL_FROM=Knowly <knowly.app@gmail.com>
 RESEND_API_KEY=
 
@@ -100,7 +100,7 @@ crontab -e
 0 4 * * * /opt/knowly/deploy/backup.sh >> /var/log/knowly-backup.log 2>&1
 ```
 
-Quedan en `/opt/knowly-backups` (últimos 14). Conviene activar también los *Backups* de Hetzner (≈20% del precio del servidor).
+Quedan en `/opt/knowly-backups` (últimos 14). Conviene activar también los *Backups* de DigitalOcean (desde ≈20% del precio del droplet).
 
 ## Actualizar
 
@@ -114,7 +114,7 @@ docker image prune -f
 ## Problemas comunes
 
 - **Caddy no obtiene certificado:** revisá que los registros A apunten a la IP (`dig +short api.knowly.duckdns.org`) y que los puertos 80/443 estén abiertos.
-- **No llegan los mails:** revisá `docker compose -f docker-compose.prod.yml logs backend`. `535 Username and Password not accepted` significa que la contraseña de aplicación está mal o falta la verificación en 2 pasos. Mirá también la carpeta de spam.
+- **No llegan los mails:** revisá `docker compose -f docker-compose.prod.yml logs backend`. `Network is unreachable` o un timeout significa que el puerto SMTP está bloqueado (usá el 2525); un error `535` significa que el Login o la SMTP key están mal. Mirá también la carpeta de spam.
 - **La ingesta falla con "Sign in to confirm you're not a bot":** YouTube bloquea IPs de datacenter. Exportá cookies de tu navegador (extensión *Get cookies.txt LOCALLY*) y pasáselas a yt-dlp con `--cookies` (requiere un cambio chico en `ingest_service.py`).
 - **Errores de CORS:** `FRONTEND_ORIGINS` tiene que ser exactamente `https://` + `APP_DOMAIN`, sin `/` final.
 - **Cambié `API_DOMAIN`:** hay que reconstruir el frontend (`up -d --build`), porque la URL queda embebida en el bundle.

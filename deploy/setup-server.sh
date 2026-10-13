@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time setup for a fresh Ubuntu 24.04 Hetzner server. Run as root:
+# One-time setup for a fresh Ubuntu 24.04 server (DigitalOcean droplet or any VPS). Run as root:
 #   bash deploy/setup-server.sh
 set -euo pipefail
 
