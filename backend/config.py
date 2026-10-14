@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # Adaptive retrieval settings for broad queries
     broad_per_class_results: int = 10
     broad_n_results: int = 10
-    broad_max_tokens: int = 4096
+    broad_max_tokens: int = 16000
     max_context_chars: int = 80000
 
     # Auth
@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     otp_expire_minutes: int = 10
     otp_max_attempts: int = 5
     otp_resend_cooldown_seconds: int = 60
+    # New emails get access right away while there are fewer than max_users approved
+    # accounts (0 = no cap). Past the cap, or with auto-approve off, they join the
+    # waitlist (pending) for an admin to approve.
+    auto_approve_users: bool = True
+    max_users: int = 200
 
     # Email. If smtp_host is set, emails go to that SMTP server (MailDev in local dev,
     # or e.g. Gmail with an app password in production when smtp_username is set).
@@ -58,7 +63,14 @@ class Settings(BaseSettings):
     auth_start_limit_per_ip: int = 10  # per 10 minutes
     auth_verify_limit_per_ip: int = 20  # per 10 minutes
     chat_limit_per_hour: int = 60
-    ingest_limit_per_day: int = 10
+    ingest_limit_per_day: int = 3
+
+    # Ingest quotas (admins are exempt from the per-user ones)
+    max_classes_per_user: int = 5
+    max_active_ingests_per_user: int = 1
+    max_video_minutes: int = 180
+    # Ingests run one after another in this many worker threads; the rest wait in a queue
+    ingest_workers: int = 1
 
     @field_validator("admin_emails", mode="before")
     @classmethod

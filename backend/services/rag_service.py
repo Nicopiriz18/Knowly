@@ -311,21 +311,33 @@ def generate(state: RAGState) -> dict:
         prompt_template += BROAD_INSTRUCTION
 
     system_prompt = prompt_template.format(context=context)
-    max_tokens = settings.broad_max_tokens if query_type == "broad" else 1024
-
-    llm = ChatAnthropic(
-        model="claude-sonnet-5",
-        api_key=settings.anthropic_api_key,
-        max_tokens=max_tokens,
-        thinking={"type": "disabled"},
-    )
+    max_tokens = settings.broad_max_tokens if query_type == "broad" else 8000
+    llm = _answer_llm(max_tokens)
 
     result = llm.invoke([
         SystemMessage(content=system_prompt),
         HumanMessage(content=state["query"]),
     ])
 
-    return {"answer": result.content, "sources": sources}
+    # .text: with thinking on, .content is a list of blocks rather than a string
+    return {"answer": str(result.text), "sources": sources}
+
+
+def _answer_llm(max_tokens: int) -> ChatAnthropic:
+    """Model that writes the final answer.
+
+    Opus 5.5 can't disable thinking; low effort keeps answers about as fast as before.
+    Thinking tokens count toward max_tokens. "fallbacks" reroutes requests that the
+    safety classifiers decline to another model instead of failing.
+    """
+    return ChatAnthropic(
+        model="claude-opus-5-5",
+        api_key=settings.anthropic_api_key,
+        max_tokens=max_tokens,
+        effort="low",
+        betas=["server-side-fallback-2026-07-01"],
+        model_kwargs={"fallbacks": "default"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -445,21 +457,15 @@ async def query_rag_stream(
         prompt_template += BROAD_INSTRUCTION
 
     system_prompt = prompt_template.format(context=context)
-    max_tokens = settings.broad_max_tokens if query_type == "broad" else 1024
-
-    llm = ChatAnthropic(
-        model="claude-sonnet-5",
-        api_key=settings.anthropic_api_key,
-        max_tokens=max_tokens,
-        thinking={"type": "disabled"},
-    )
+    max_tokens = settings.broad_max_tokens if query_type == "broad" else 8000
+    llm = _answer_llm(max_tokens)
 
     async for chunk in llm.astream([
         SystemMessage(content=system_prompt),
         HumanMessage(content=query),
     ]):
-        if hasattr(chunk, "content") and chunk.content:
-            yield f"data: {json.dumps(chunk.content, ensure_ascii=False)}\n\n"
+        if chunk.text:
+            yield f"data: {json.dumps(chunk.text, ensure_ascii=False)}\n\n"
 
     # Send sources at the end
     sources_dicts = [s.model_dump() for s in sources]
