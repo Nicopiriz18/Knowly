@@ -17,6 +17,7 @@ from config import settings
 from schemas import IngestStatus
 from services.pinecone_client import get_index
 from services.class_service import register_class
+from services import observability
 
 # In-memory job tracker
 jobs: dict[str, IngestStatus] = {}
@@ -330,14 +331,12 @@ def _deduplicate_frames(frames: list[dict], threshold: int) -> list[dict]:
     return kept
 
 
-def _analyze_frames(frames: list[dict], class_id: str) -> list[dict]:
+def _analyze_frames(frames: list[dict], class_id: str, owner: str, trace_id: str) -> list[dict]:
     """Describe visual content of frames using Claude Vision.
 
     Processes frames in batches and caches results.
     Returns list of {"timestamp": int, "description": str}.
     """
-    import anthropic
-
     visual_dir = Path(settings.data_dir) / "visual"
     visual_dir.mkdir(parents=True, exist_ok=True)
     cache_path = visual_dir / f"{class_id}.json"
@@ -346,7 +345,7 @@ def _analyze_frames(frames: list[dict], class_id: str) -> list[dict]:
         with open(cache_path) as f:
             return json.load(f)
 
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = observability.anthropic_client()
     descriptions: list[dict] = []
     batch_size = 5
 
@@ -389,6 +388,7 @@ def _analyze_frames(frames: list[dict], class_id: str) -> list[dict]:
             model=settings.vision_model,
             max_tokens=1024,
             messages=[{"role": "user", "content": content}],
+            **observability.tracking_kwargs(owner, trace_id, step="analyze_frames", class_id=class_id),
         )
 
         response_text = response.content[0].text
@@ -487,9 +487,9 @@ def _build_chunks(
     return chunks
 
 
-def _embed_and_store(chunks: list[dict], owner: str) -> None:
+def _embed_and_store(chunks: list[dict], owner: str, trace_id: str) -> None:
     """Generate embeddings and store in Pinecone."""
-    client = openai.OpenAI(api_key=settings.openai_api_key)
+    client = observability.openai_client()
     index = get_index()
 
     texts = [c["text"] for c in chunks]
@@ -497,6 +497,7 @@ def _embed_and_store(chunks: list[dict], owner: str) -> None:
     response = client.embeddings.create(
         model="text-embedding-3-small",
         input=texts,
+        **observability.tracking_kwargs(owner, trace_id, step="embed", class_id=chunks[0]["class_id"] if chunks else None),
     )
     embeddings = [item.embedding for item in response.data]
 
@@ -572,7 +573,7 @@ def run_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str
 
             # Phase 4: Analyze frames with vision
             jobs[job_id] = IngestStatus(status="analyzing_frames", message=f"Analizando {len(frames)} frames con vision...", progress=55, title=title)
-            visual_descriptions = _analyze_frames(frames, class_id)
+            visual_descriptions = _analyze_frames(frames, class_id, owner, job_id)
 
             # Cleanup video and frame files
             _cleanup_video_files(class_id, video_path)
@@ -584,7 +585,7 @@ def run_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str
         if visual_descriptions:
             chunks = _merge_visual_descriptions(chunks, visual_descriptions)
 
-        _embed_and_store(chunks, owner)
+        _embed_and_store(chunks, owner, job_id)
 
         # Done
         jobs[job_id] = IngestStatus(status="done", message=f"Ingested {len(chunks)} chunks successfully.", progress=100, title=title)

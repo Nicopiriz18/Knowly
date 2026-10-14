@@ -3,17 +3,38 @@
 import json
 from collections.abc import AsyncGenerator
 from typing import TypedDict
+from uuid import uuid4
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 
 from config import settings
 from schemas import Source
 from services.pinecone_client import get_index
 from services.class_service import class_titles, list_classes
+from services import observability
+
+
+def _observability_config(owner: str) -> RunnableConfig:
+    """LangChain config that traces one chat turn (classifier, grading, answer) in PostHog.
+
+    Prompts and answers are captured; the user is identified by a hash of the email.
+    """
+    if not observability.enabled:
+        return {}
+    from posthog.ai.langchain import CallbackHandler
+
+    handler = CallbackHandler(
+        client=observability.posthog_client,
+        distinct_id=observability.distinct_id(owner),
+        trace_id=str(uuid4()),
+    )
+    return {"callbacks": [handler]}
+
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -227,7 +248,7 @@ def _build_context(docs: list[Document]) -> str:
     return "\n---\n".join(fragments)
 
 
-async def classify_query(query: str) -> str:
+async def classify_query(query: str, config: RunnableConfig | None = None) -> str:
     """Classify a query as 'broad' or 'specific' using a fast LLM call."""
     llm = ChatAnthropic(
         model="claude-haiku-4-5-20251001",
@@ -235,7 +256,7 @@ async def classify_query(query: str) -> str:
         max_tokens=10,
     )
     result = await llm.ainvoke(
-        CLASSIFY_PROMPT.format_messages(query=query)
+        CLASSIFY_PROMPT.format_messages(query=query), config=config
     )
     classification = result.content.strip().lower()
     return "broad" if "broad" in classification else "specific"
@@ -245,9 +266,9 @@ async def classify_query(query: str) -> str:
 # Graph nodes
 # ---------------------------------------------------------------------------
 
-async def classify(state: RAGState) -> dict:
+async def classify(state: RAGState, config: RunnableConfig) -> dict:
     """Classify the query as broad or specific."""
-    query_type = await classify_query(state["query"])
+    query_type = await classify_query(state["query"], config)
     return {"query_type": query_type}
 
 
@@ -277,7 +298,7 @@ def retrieve(state: RAGState) -> dict:
     return {"documents": docs}
 
 
-async def grade_documents(state: RAGState) -> dict:
+async def grade_documents(state: RAGState, config: RunnableConfig | None = None) -> dict:
     """Filter out irrelevant documents using a fast LLM call."""
     docs = state["documents"]
     if not docs:
@@ -292,7 +313,8 @@ async def grade_documents(state: RAGState) -> dict:
     relevant: list[Document] = []
     for doc in docs:
         result = await llm.ainvoke(
-            GRADE_PROMPT.format_messages(document=doc.page_content, query=state["query"])
+            GRADE_PROMPT.format_messages(document=doc.page_content, query=state["query"]),
+            config=config,
         )
         if "si" in result.content.lower():
             relevant.append(doc)
@@ -300,7 +322,7 @@ async def grade_documents(state: RAGState) -> dict:
     return {"documents": relevant if relevant else docs}
 
 
-def generate(state: RAGState) -> dict:
+def generate(state: RAGState, config: RunnableConfig) -> dict:
     """Generate answer using Claude with retrieved context."""
     docs = state["documents"]
     query_type = state.get("query_type", "specific")
@@ -323,10 +345,13 @@ def generate(state: RAGState) -> dict:
     max_tokens = settings.broad_max_tokens if query_type == "broad" else 8000
     llm = _answer_llm(max_tokens)
 
-    result = llm.invoke([
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=state["query"]),
-    ])
+    result = llm.invoke(
+        [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=state["query"]),
+        ],
+        config=config,
+    )
 
     # .text: with thinking on, .content is a list of blocks rather than a string
     return {"answer": str(result.text), "sources": sources}
@@ -397,16 +422,19 @@ async def query_rag(
     materia_id: str | None = None,
 ) -> tuple[str, list[Source]]:
     """Answer a question using the RAG graph. Returns (answer_text, sources)."""
-    result = await rag_graph.ainvoke({
-        "query": query,
-        "owner": owner,
-        "class_id": class_id,
-        "materia_id": materia_id,
-        "documents": [],
-        "answer": "",
-        "sources": [],
-        "query_type": "",
-    })
+    result = await rag_graph.ainvoke(
+        {
+            "query": query,
+            "owner": owner,
+            "class_id": class_id,
+            "materia_id": materia_id,
+            "documents": [],
+            "answer": "",
+            "sources": [],
+            "query_type": "",
+        },
+        config=_observability_config(owner),
+    )
     return result["answer"], result["sources"]
 
 
@@ -417,8 +445,10 @@ async def query_rag_stream(
     materia_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream an answer using retrieve+grade from the graph, then stream LLM directly."""
+    observability_config = _observability_config(owner)
+
     # Step 1: Classify query
-    query_type = await classify_query(query)
+    query_type = await classify_query(query, observability_config)
 
     # Step 2: Retrieve with adaptive parameters
     if query_type == "broad":
@@ -454,7 +484,7 @@ async def query_rag_stream(
             "sources": [],
             "query_type": query_type,
         }
-        graded = await grade_documents(state)
+        graded = await grade_documents(state, observability_config)
         docs = graded["documents"]
 
     # Step 4: Build context and stream the LLM response
@@ -470,10 +500,13 @@ async def query_rag_stream(
     max_tokens = settings.broad_max_tokens if query_type == "broad" else 8000
     llm = _answer_llm(max_tokens)
 
-    async for chunk in llm.astream([
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=query),
-    ]):
+    async for chunk in llm.astream(
+        [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=query),
+        ],
+        config=observability_config,
+    ):
         if chunk.text:
             yield f"data: {json.dumps(chunk.text, ensure_ascii=False)}\n\n"
 

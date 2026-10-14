@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     openai_api_key: str
     anthropic_api_key: str
     pinecone_api_key: str
+    # PostHog AI Observability. Empty token = disabled (e.g. local development).
+    posthog_project_token: str = ""
+    posthog_host: str = "https://us.i.posthog.com"
     pinecone_index_name: str = "classes"
     data_dir: str = str(Path(__file__).resolve().parent.parent / "data")
     chunk_duration: int = 180
