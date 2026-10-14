@@ -11,6 +11,9 @@ COPY . .
 # so they must be passed as build args (setting them at runtime has no effect).
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# PostHog analytics + session replay (empty = off)
+ARG NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=
+ENV NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=$NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build

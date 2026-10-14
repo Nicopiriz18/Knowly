@@ -108,7 +108,7 @@ export default function AdminPage() {
             {visible.map((u) => (
               <li key={u.email} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <div className="flex-1 min-w-[200px]">
-                  <p className="text-sm text-gray-200 break-all">
+                  <p className="ph-mask text-sm text-gray-200 break-all">
                     {u.email}
                     {u.is_admin && (
                       <span className="ml-2 text-[10px] uppercase tracking-wide bg-indigo-600/20 text-indigo-400 px-1.5 py-0.5 rounded">

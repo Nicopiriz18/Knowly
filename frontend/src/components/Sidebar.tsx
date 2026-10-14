@@ -362,7 +362,7 @@ export default function Sidebar({
         )}
         {user && (
           <div className="mt-2 flex items-center gap-2 px-2 pt-2 border-t border-gray-800">
-            <span className="flex-1 text-xs text-gray-500 truncate" title={user.email}>
+            <span className="ph-mask flex-1 text-xs text-gray-500 truncate" title={user.email}>
               {user.email}
             </span>
             <button

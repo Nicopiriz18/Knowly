@@ -3,7 +3,30 @@
 
 {$APP_DOMAIN} {
 	encode zstd gzip
-	reverse_proxy frontend:3000
+
+	# PostHog (analytics + session replay) through our own domain so ad blockers
+	# don't drop it. Neutral path on purpose: blockers match names like /posthog.
+	handle_path /k7r/* {
+		@assets path /static/* /array/*
+		handle @assets {
+			reverse_proxy https://us-assets.i.posthog.com {
+				header_up Host us-assets.i.posthog.com
+				header_up -Cookie
+				header_up -Authorization
+			}
+		}
+		handle {
+			reverse_proxy https://us.i.posthog.com {
+				header_up Host us.i.posthog.com
+				header_up -Cookie
+				header_up -Authorization
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
 }
 
 {$API_DOMAIN} {

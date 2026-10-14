@@ -115,7 +115,7 @@ export default function LoginPage() {
               <div>
                 <h2 className="text-lg font-semibold text-white">Revisá tu mail</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  Enviamos un código de 6 dígitos a <span className="text-gray-300">{email}</span>.
+                  Enviamos un código de 6 dígitos a <span className="ph-mask text-gray-300">{email}</span>.
                 </p>
               </div>
               <input
@@ -159,7 +159,7 @@ export default function LoginPage() {
               <div>
                 <h2 className="text-lg font-semibold text-white">Solicitud pendiente</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  Registramos tu pedido de acceso para <span className="text-gray-300">{email}</span>.
+                  Registramos tu pedido de acceso para <span className="ph-mask text-gray-300">{email}</span>.
                   Te avisamos por mail cuando sea aprobado.
                 </p>
               </div>

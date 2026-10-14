@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Me, getMe } from "@/lib/api";
 import { clearToken, getToken } from "@/lib/auth";
+import { identifyUser, initAnalytics, resetAnalytics } from "@/lib/analytics";
 
 const PUBLIC_PATHS = ["/login"];
 
@@ -46,8 +47,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
+    initAnalytics();
     refresh().finally(() => setChecked(true));
   }, [refresh]);
+
+  useEffect(() => {
+    if (user) identifyUser(user.email);
+  }, [user]);
 
   useEffect(() => {
     if (!checked) return;
@@ -56,6 +62,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }, [checked, user, isPublic, pathname, router]);
 
   const logout = useCallback(() => {
+    resetAnalytics();
     clearToken();
     setUser(null);
     router.replace("/login");

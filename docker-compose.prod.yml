@@ -44,6 +44,7 @@ services:
       args:
         # Baked into the JS bundle at build time: rebuild after changing it.
         - NEXT_PUBLIC_API_URL=https://${API_DOMAIN}
+        - NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=${POSTHOG_PROJECT_TOKEN:-}
     depends_on:
       - backend
     restart: unless-stopped
