@@ -69,6 +69,8 @@ APP_DOMAIN=knowly.duckdns.org
 API_DOMAIN=api.knowly.duckdns.org
 FRONTEND_URL=https://knowly.duckdns.org
 FRONTEND_ORIGINS=https://knowly.duckdns.org
+
+YTDLP_COOKIES_FILE=/app/data/youtube_cookies.txt
 ```
 
 `NEXT_PUBLIC_API_URL` y `FORWARDED_ALLOW_IPS` los define `docker-compose.prod.yml`; no hace falta cargarlos.
@@ -81,7 +83,22 @@ Las clases ya ingeridas viven en Pinecone **y** en `data/`. Si usás la misma `P
 scp -r data/classes_registry.json data/materias.json data/transcripts data/visual root@<IP>:/opt/knowly/data/
 ```
 
-## 6. Levantar
+## 6. Cookies de YouTube
+
+YouTube bloquea las IPs de datacenter ("Sign in to confirm you're not a bot"), así que yt-dlp necesita las cookies de una cuenta logueada.
+
+1. Usá una cuenta de Google descartable, no la personal: YouTube puede restringir cuentas con uso automatizado.
+2. Abrí una ventana de incógnito, iniciá sesión en <https://www.youtube.com> con esa cuenta y exportá las cookies con la extensión *Get cookies.txt LOCALLY* (formato Netscape).
+3. Cerrá la ventana de incógnito sin cerrar sesión, así el navegador no rota las cookies que exportaste.
+4. Subí el archivo desde tu máquina:
+
+   ```bash
+   scp youtube_cookies.txt root@<IP>:/opt/knowly/data/youtube_cookies.txt
+   ```
+
+No hace falta reiniciar: el archivo se lee en cada ingesta. Las cookies vencen cada tanto; cuando la ingesta diga que hay que renovarlas, repetí estos pasos.
+
+## 7. Levantar
 
 ```bash
 cd /opt/knowly
@@ -91,7 +108,7 @@ docker compose -f docker-compose.prod.yml logs -f
 
 Abrí `https://knowly.duckdns.org`. La primera vez Caddy tarda unos segundos en sacar el certificado.
 
-## 7. Backups diarios
+## 8. Backups diarios
 
 ```bash
 chmod +x deploy/backup.sh
@@ -115,6 +132,6 @@ docker image prune -f
 
 - **Caddy no obtiene certificado:** revisá que los registros A apunten a la IP (`dig +short api.knowly.duckdns.org`) y que los puertos 80/443 estén abiertos.
 - **No llegan los mails:** revisá `docker compose -f docker-compose.prod.yml logs backend`. `Network is unreachable` o un timeout significa que el puerto SMTP está bloqueado (usá el 2525); un error `535` significa que el Login o la SMTP key están mal. Mirá también la carpeta de spam.
-- **La ingesta falla con "Sign in to confirm you're not a bot":** YouTube bloquea IPs de datacenter. Exportá cookies de tu navegador (extensión *Get cookies.txt LOCALLY*) y pasáselas a yt-dlp con `--cookies` (requiere un cambio chico en `ingest_service.py`).
+- **La ingesta dice que YouTube bloqueó la descarga:** faltan las cookies o vencieron. Repetí el paso 6.
 - **Errores de CORS:** `FRONTEND_ORIGINS` tiene que ser exactamente `https://` + `APP_DOMAIN`, sin `/` final.
 - **Cambié `API_DOMAIN`:** hay que reconstruir el frontend (`up -d --build`), porque la URL queda embebida en el bundle.

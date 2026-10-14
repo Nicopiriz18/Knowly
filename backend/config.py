@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     frame_interval: int = 30
     frame_similarity_threshold: int = 5
     vision_model: str = "claude-haiku-4-5-20251001"
+    # Netscape-format cookies file passed to yt-dlp (--cookies). Needed in production:
+    # YouTube asks datacenter IPs to sign in. Empty = no cookies (fine from a home connection).
+    ytdlp_cookies_file: str = ""
     # Adaptive retrieval settings for broad queries
     broad_per_class_results: int = 10
     broad_n_results: int = 10

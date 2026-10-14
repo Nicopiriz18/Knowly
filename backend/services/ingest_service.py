@@ -35,6 +35,32 @@ def _find_ytdlp() -> str:
     raise RuntimeError("yt-dlp not found. Make sure it is installed and on PATH.")
 
 
+def _run_ytdlp(*args: str) -> str:
+    """Run yt-dlp with the configured cookies and return its stdout.
+
+    Raises RuntimeError with a readable message instead of the bare CalledProcessError,
+    so the real cause (e.g. YouTube's bot check) reaches the UI.
+    """
+    cmd = [_find_ytdlp()]
+    if settings.ytdlp_cookies_file:
+        if not Path(settings.ytdlp_cookies_file).is_file():
+            raise RuntimeError(
+                f"No se encontró el archivo de cookies de YouTube ({settings.ytdlp_cookies_file})."
+            )
+        cmd += ["--cookies", settings.ytdlp_cookies_file]
+    result = subprocess.run([*cmd, *args], capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr = result.stderr
+        if "not a bot" in stderr or "Sign in to confirm" in stderr:
+            raise RuntimeError(
+                "YouTube bloqueó la descarga desde el servidor (pide iniciar sesión). "
+                "Hay que cargar o renovar las cookies de YouTube."
+            )
+        errors = [line for line in stderr.splitlines() if line.startswith("ERROR:")]
+        raise RuntimeError(errors[-1] if errors else f"yt-dlp falló (código {result.returncode}).")
+    return result.stdout
+
+
 def _find_ffmpeg() -> str:
     """Find ffmpeg executable on PATH."""
     found = shutil.which("ffmpeg")
@@ -54,25 +80,18 @@ def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str]:
     audio_dir = Path(settings.data_dir) / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
     audio_path = audio_dir / f"{class_id}.mp3"
-    ytdlp = _find_ytdlp()
 
     # "--" ends option parsing so the URL can never be interpreted as a yt-dlp flag.
     # Extract video info to get the YouTube video ID
-    result = subprocess.run(
-        [ytdlp, "--dump-json", "--no-download", "--no-playlist", "--", url],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    info = json.loads(result.stdout)
+    info = json.loads(_run_ytdlp("--dump-json", "--no-download", "--no-playlist", "--", url))
     video_id = info["id"]
 
     if not settings.enable_video_analysis:
         # Audio-only download (original behavior)
         if not audio_path.exists():
-            subprocess.run(
-                [ytdlp, "-x", "--audio-format", "mp3", "--no-playlist", "-o", str(audio_path), "--", url],
-                check=True,
+            _run_ytdlp(
+                "-x", "--audio-format", "mp3", "--no-playlist", "--no-progress",
+                "-o", str(audio_path), "--", url,
             )
         return audio_path, None, video_id
 
@@ -82,16 +101,13 @@ def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str]:
     video_path = video_dir / f"{class_id}.mp4"
 
     if not video_path.exists():
-        subprocess.run(
-            [
-                ytdlp,
-                "-f", "bestvideo[height<=480]+bestaudio/best[height<=480]",
-                "--merge-output-format", "mp4",
-                "--no-playlist",
-                "-o", str(video_path),
-                "--", url,
-            ],
-            check=True,
+        _run_ytdlp(
+            "-f", "bestvideo[height<=480]+bestaudio/best[height<=480]",
+            "--merge-output-format", "mp4",
+            "--no-playlist",
+            "--no-progress",
+            "-o", str(video_path),
+            "--", url,
         )
 
     # Extract audio from video with ffmpeg (mono 16 kHz 32 kbps is enough for speech
