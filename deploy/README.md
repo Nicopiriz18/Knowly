@@ -85,18 +85,52 @@ scp -r data/classes_registry.json data/materias.json data/transcripts data/visua
 
 ## 6. Cookies de YouTube
 
-YouTube bloquea las IPs de datacenter ("Sign in to confirm you're not a bot"), así que yt-dlp necesita las cookies de una cuenta logueada.
+YouTube bloquea las IPs de datacenter ("Sign in to confirm you're not a bot"), así que yt-dlp descarga con las cookies de una cuenta logueada. El backend las lee del archivo que indica `YTDLP_COOKIES_FILE` (en producción, `/app/data/youtube_cookies.txt`, que en el servidor es `/opt/knowly/data/youtube_cookies.txt`). En local no hace falta: dejá la variable vacía.
 
-1. Usá una cuenta de Google descartable, no la personal: YouTube puede restringir cuentas con uso automatizado.
-2. Abrí una ventana de incógnito, iniciá sesión en <https://www.youtube.com> con esa cuenta y exportá las cookies con la extensión *Get cookies.txt LOCALLY* (formato Netscape).
-3. Cerrá la ventana de incógnito sin cerrar sesión, así el navegador no rota las cookies que exportaste.
-4. Subí el archivo desde tu máquina:
+### Exportar
 
-   ```bash
-   scp youtube_cookies.txt root@<IP>:/opt/knowly/data/youtube_cookies.txt
-   ```
+1. Usá una **cuenta de Google descartable**, no la personal: YouTube puede restringir cuentas con uso automatizado.
+2. Instalá la extensión [Get cookies.txt LOCALLY](https://chromewebstore.google.com/search/get%20cookies.txt%20locally) y, en `chrome://extensions` → *Detalles*, activá **Permitir en modo incógnito**.
+3. Abrí una ventana de incógnito, entrá a <https://www.youtube.com> e iniciá sesión. **Confirmá que arriba a la derecha aparece el avatar de la cuenta** y no el botón "Acceder"; si no, recargá. Reproducí un video unos segundos.
+4. En esa misma pestaña de YouTube: extensión → **Export** (formato Netscape). Guardá el archivo como `youtube_cookies.txt`.
+5. Cerrá la ventana de incógnito **sin cerrar sesión**: si cerrás sesión o seguís usando esa ventana, Google invalida o rota las cookies exportadas.
 
-No hace falta reiniciar: el archivo se lee en cada ingesta. Las cookies vencen cada tanto; cuando la ingesta diga que hay que renovarlas, repetí estos pasos.
+### Verificar antes de subir
+
+El archivo tiene que incluir las cookies de sesión (`SID`, `SAPISID`, `__Secure-3PSID`, `LOGIN_INFO`...). Si solo trae cookies de visitante (`VISITOR_INFO1_LIVE`, `YSC`, `PREF`), se exportó sin la sesión iniciada y YouTube va a seguir bloqueando. En PowerShell, desde la carpeta del archivo:
+
+```powershell
+Select-String -Path youtube_cookies.txt -Pattern "LOGIN_INFO" -SimpleMatch -Quiet
+```
+
+Tiene que devolver `True`. Si devuelve `False`, repetí la exportación.
+
+### Subir y probar
+
+```bash
+scp youtube_cookies.txt root@<IP>:/opt/knowly/data/youtube_cookies.txt
+ssh root@<IP> chmod 600 /opt/knowly/data/youtube_cookies.txt
+```
+
+No hace falta reiniciar: el archivo se lee en cada ingesta. Para comprobarlo sin crear una clase, en el servidor:
+
+```bash
+cd /opt/knowly
+docker compose -f docker-compose.prod.yml exec -T backend python -c \
+  "from services.ingest_service import _run_ytdlp; import json; print(json.loads(_run_ytdlp('--dump-json', '--no-download', '--', 'https://youtu.be/<VIDEO_ID>'))['title'])"
+```
+
+Si imprime el título del video, funciona. Después **borrá la copia local** del archivo: contiene la sesión de la cuenta.
+
+### Renovar
+
+Las cookies vencen sin aviso: típicamente en semanas o un par de meses, antes si se usan mucho o si se cierra sesión en esa cuenta. Cuando vencen, la ingesta falla con *"YouTube bloqueó la descarga desde el servidor… Hay que cargar o renovar las cookies de YouTube"*. Repetí **Exportar**, **Verificar** y **Subir** con la misma cuenta; el archivo nuevo reemplaza al anterior.
+
+Notas:
+
+- yt-dlp reescribe el archivo con las cookies que le devuelve YouTube, lo que ayuda a que la sesión dure más. Por eso tiene que ser escribible dentro del contenedor (lo es, porque `data/` está montado).
+- `.gitignore` excluye `data/*cookies*.txt`: el archivo nunca debe entrar al repo. Los backups de `deploy/backup.sh` sí lo incluyen y quedan en `/opt/knowly-backups`, accesible solo por root.
+- Si las cookies empiezan a vencer muy seguido, la alternativa es un proxy residencial pago (yt-dlp `--proxy`).
 
 ## 7. Levantar
 
@@ -132,6 +166,7 @@ docker image prune -f
 
 - **Caddy no obtiene certificado:** revisá que los registros A apunten a la IP (`dig +short api.knowly.duckdns.org`) y que los puertos 80/443 estén abiertos.
 - **No llegan los mails:** revisá `docker compose -f docker-compose.prod.yml logs backend`. `Network is unreachable` o un timeout significa que el puerto SMTP está bloqueado (usá el 2525); un error `535` significa que el Login o la SMTP key están mal. Mirá también la carpeta de spam.
-- **La ingesta dice que YouTube bloqueó la descarga:** faltan las cookies o vencieron. Repetí el paso 6.
+- **La ingesta dice que YouTube bloqueó la descarga:** las cookies vencieron o se exportaron sin la sesión iniciada. Seguí [Renovar](#renovar) en el paso 6.
+- **La ingesta dice "No se encontró el archivo de cookies":** `YTDLP_COOKIES_FILE` apunta a un archivo que no existe; subilo (paso 6) o revisá la ruta en `.env`.
 - **Errores de CORS:** `FRONTEND_ORIGINS` tiene que ser exactamente `https://` + `APP_DOMAIN`, sin `/` final.
 - **Cambié `API_DOMAIN`:** hay que reconstruir el frontend (`up -d --build`), porque la URL queda embebida en el bundle.
