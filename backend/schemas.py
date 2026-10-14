@@ -28,6 +28,9 @@ class LoginVerifyResponse(BaseModel):
 class MeResponse(BaseModel):
     email: str
     is_admin: bool
+    # None = no limit (admins)
+    max_classes: int | None
+    max_video_minutes: int
 
 
 class UserInfo(BaseModel):
@@ -77,8 +80,14 @@ _YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.yout
 
 class IngestRequest(BaseModel):
     url: str
-    title: str = Field(min_length=1, max_length=200)
+    # Empty means "use the video's own title"
+    title: str = Field(default="", max_length=200)
     materia_id: str
+
+    @field_validator("title")
+    @classmethod
+    def _strip_title(cls, v: str) -> str:
+        return v.strip()
 
     @field_validator("url")
     @classmethod
@@ -98,6 +107,8 @@ class IngestStatus(BaseModel):
     status: Literal["pending", "downloading", "transcribing", "extracting_frames", "analyzing_frames", "embedding", "done", "error"]
     message: str = ""
     progress: int = 0
+    # Final class title (the video's title when the user left it empty), known after download
+    title: str = ""
 
 
 # ---------------------------------------------------------------------------

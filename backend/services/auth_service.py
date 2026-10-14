@@ -99,12 +99,23 @@ def _hash_code(email: str, code: str) -> str:
     return hmac.new(settings.jwt_secret.encode(), f"{email}:{code}".encode(), hashlib.sha256).hexdigest()
 
 
+def _can_auto_approve() -> bool:
+    if not settings.auto_approve_users:
+        return False
+    if settings.max_users <= 0:
+        return True
+    with get_conn() as conn:
+        approved = conn.execute("SELECT COUNT(*) FROM users WHERE status = 'approved'").fetchone()[0]
+    return approved < settings.max_users
+
+
 def start_login(email: str) -> Literal["otp_sent", "pending"]:
     """Entry point for the login screen.
 
     - Approved users (and admins) receive a one-time code by email.
-    - Unknown emails are registered as a pending access request.
-    - Pending/rejected users are told their request is pending.
+    - Unknown or waitlisted emails are approved right away while auto-approve has room;
+      otherwise they are registered as a pending access request.
+    - Rejected users are told their request is pending.
     """
     email = normalize_email(email)
     now = time.time()
@@ -114,17 +125,29 @@ def start_login(email: str) -> Literal["otp_sent", "pending"]:
 
     user = get_user(email)
 
-    if user is None:
+    if user is None or user["status"] == "pending":
+        if not _can_auto_approve():
+            if user is None:
+                with get_conn() as conn:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO users (email, status, created_at) VALUES (?, 'pending', ?)",
+                        (email, now),
+                    )
+                try:
+                    email_service.send_new_request_email(email)
+                except Exception:
+                    logger.exception("Could not notify admins about request from %s", email)
+            return "pending"
+
         with get_conn() as conn:
             conn.execute(
-                "INSERT OR IGNORE INTO users (email, status, created_at) VALUES (?, 'pending', ?)",
-                (email, now),
+                """
+                INSERT INTO users (email, status, created_at, decided_at) VALUES (?, 'approved', ?, ?)
+                ON CONFLICT(email) DO UPDATE SET status = 'approved', decided_at = excluded.decided_at
+                """,
+                (email, now, now),
             )
-        try:
-            email_service.send_new_request_email(email)
-        except Exception:
-            logger.exception("Could not notify admins about request from %s", email)
-        return "pending"
+        user = get_user(email)
 
     if user["status"] != "approved":
         return "pending"

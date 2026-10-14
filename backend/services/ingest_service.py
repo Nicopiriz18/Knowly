@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import openai
@@ -19,6 +20,27 @@ from services.class_service import register_class
 # In-memory job tracker
 jobs: dict[str, IngestStatus] = {}
 job_owners: dict[str, str] = {}
+
+# Ingests are heavy (ffmpeg, downloads, many API calls), so a small pool runs them
+# and the rest wait in order. _queue holds the job_ids not yet picked by a worker.
+_executor = ThreadPoolExecutor(max_workers=max(1, settings.ingest_workers), thread_name_prefix="ingest")
+_queue: list[str] = []
+_queue_lock = threading.Lock()
+
+
+def queue_position(job_id: str) -> int | None:
+    """1-based position of a job waiting for a worker, or None if it isn't queued."""
+    with _queue_lock:
+        return _queue.index(job_id) + 1 if job_id in _queue else None
+
+
+def active_job_count(owner: str) -> int:
+    """Jobs of `owner` that are queued or running."""
+    return sum(
+        1
+        for job_id, job_owner in list(job_owners.items())
+        if job_owner == owner and jobs[job_id].status not in ("done", "error")
+    )
 
 
 def _find_ytdlp() -> str:
@@ -69,13 +91,13 @@ def _find_ffmpeg() -> str:
     raise RuntimeError("ffmpeg not found. Make sure it is installed and on PATH.")
 
 
-def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str]:
+def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str, str]:
     """Download media using yt-dlp.
 
     If video analysis is enabled, downloads video (480p max) and extracts audio.
     Otherwise downloads audio only.
 
-    Returns (audio_path, video_path | None, youtube_video_id).
+    Returns (audio_path, video_path | None, youtube_video_id, video_title).
     """
     audio_dir = Path(settings.data_dir) / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
@@ -85,6 +107,16 @@ def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str]:
     # Extract video info to get the YouTube video ID
     info = json.loads(_run_ytdlp("--dump-json", "--no-download", "--no-playlist", "--", url))
     video_id = info["id"]
+    video_title = (info.get("title") or "").strip()
+
+    # Cost guard: transcription and frame analysis scale with the video length
+    if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
+        raise RuntimeError("No se pueden indexar transmisiones en vivo. Probá cuando termine.")
+    duration = info.get("duration") or 0
+    if settings.max_video_minutes and duration > settings.max_video_minutes * 60:
+        raise RuntimeError(
+            f"El video dura {int(duration // 60)} minutos y el máximo es {settings.max_video_minutes}."
+        )
 
     if not settings.enable_video_analysis:
         # Audio-only download (original behavior)
@@ -93,7 +125,7 @@ def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str]:
                 "-x", "--audio-format", "mp3", "--no-playlist", "--no-progress",
                 "-o", str(audio_path), "--", url,
             )
-        return audio_path, None, video_id
+        return audio_path, None, video_id, video_title
 
     # Video download path
     video_dir = Path(settings.data_dir) / "raw_videos"
@@ -119,7 +151,7 @@ def _download_media(url: str, class_id: str) -> tuple[Path, Path | None, str]:
             check=True,
         )
 
-    return audio_path, video_path, video_id
+    return audio_path, video_path, video_id, video_title
 
 
 # Whisper API rejects uploads over 25 MB; leave some margin
@@ -483,34 +515,40 @@ def _cleanup_video_files(class_id: str, video_path: Path | None) -> None:
 
 def run_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str, owner: str) -> None:
     """Run the full ingest pipeline, updating job status at each phase."""
+    with _queue_lock:
+        if job_id in _queue:
+            _queue.remove(job_id)
     try:
         # Phase 1: Download
         jobs[job_id] = IngestStatus(status="downloading", message="Descargando media...", progress=10)
-        audio_path, video_path, video_id = _download_media(url, class_id)
+        audio_path, video_path, video_id, video_title = _download_media(url, class_id)
+        # No title given: use the video's own title (trimmed to the schema limit)
+        if not title:
+            title = (video_title or "Clase sin título")[:200]
 
         # Phase 2: Transcribe
-        jobs[job_id] = IngestStatus(status="transcribing", message="Transcribiendo audio...", progress=30)
+        jobs[job_id] = IngestStatus(status="transcribing", message="Transcribiendo audio...", progress=30, title=title)
         segments = _transcribe(audio_path, class_id)
 
         # Phase 3-4: Video analysis (if enabled)
         visual_descriptions: list[dict] = []
         if settings.enable_video_analysis and video_path is not None:
             # Phase 3: Extract frames
-            jobs[job_id] = IngestStatus(status="extracting_frames", message="Extrayendo frames del video...", progress=45)
+            jobs[job_id] = IngestStatus(status="extracting_frames", message="Extrayendo frames del video...", progress=45, title=title)
             frames = _extract_frames(video_path, class_id, settings.frame_interval)
 
             # Deduplicate
             frames = _deduplicate_frames(frames, settings.frame_similarity_threshold)
 
             # Phase 4: Analyze frames with vision
-            jobs[job_id] = IngestStatus(status="analyzing_frames", message=f"Analizando {len(frames)} frames con vision...", progress=55)
+            jobs[job_id] = IngestStatus(status="analyzing_frames", message=f"Analizando {len(frames)} frames con vision...", progress=55, title=title)
             visual_descriptions = _analyze_frames(frames, class_id)
 
             # Cleanup video and frame files
             _cleanup_video_files(class_id, video_path)
 
         # Phase 5: Build chunks, merge visual descriptions, embed
-        jobs[job_id] = IngestStatus(status="embedding", message="Generando embeddings...", progress=75)
+        jobs[job_id] = IngestStatus(status="embedding", message="Generando embeddings...", progress=75, title=title)
         chunks = _build_chunks(segments, class_id, title, url, video_id, materia_id)
 
         if visual_descriptions:
@@ -519,17 +557,16 @@ def run_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str
         _embed_and_store(chunks, owner)
 
         # Done
-        jobs[job_id] = IngestStatus(status="done", message=f"Ingested {len(chunks)} chunks successfully.", progress=100)
+        jobs[job_id] = IngestStatus(status="done", message=f"Ingested {len(chunks)} chunks successfully.", progress=100, title=title)
 
     except Exception as e:
         jobs[job_id] = IngestStatus(status="error", message=str(e), progress=0)
 
 
 def start_ingest(job_id: str, url: str, title: str, class_id: str, materia_id: str, owner: str) -> None:
-    """Start the ingest pipeline in a background thread."""
-    jobs[job_id] = IngestStatus(status="pending", message="Job queued.", progress=0)
+    """Queue the ingest pipeline to run on the worker pool."""
+    jobs[job_id] = IngestStatus(status="pending", message="En cola...", progress=0)
     job_owners[job_id] = owner
-    thread = threading.Thread(
-        target=run_ingest, args=(job_id, url, title, class_id, materia_id, owner), daemon=True
-    )
-    thread.start()
+    with _queue_lock:
+        _queue.append(job_id)
+    _executor.submit(run_ingest, job_id, url, title, class_id, materia_id, owner)

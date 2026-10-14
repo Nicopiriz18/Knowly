@@ -12,6 +12,7 @@ import {
   getIngestStatus,
 } from "@/lib/api";
 import Sidebar from "@/components/Sidebar";
+import { useAuth } from "@/components/AuthProvider";
 import {
   Download,
   Mic,
@@ -43,6 +44,7 @@ function getStepIndex(status: string): number {
 
 export default function IngestPage() {
   const [materias, setMaterias] = useState<MateriaInfo[]>([]);
+  const { user } = useAuth();
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [selectedMateria, setSelectedMateria] = useState<string | null>(null);
@@ -99,7 +101,7 @@ export default function IngestPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url || !title) return;
+    if (!url) return;
 
     setError(null);
     setStatus(null);
@@ -123,7 +125,7 @@ export default function IngestPage() {
         return;
       }
 
-      const id = await startIngest(url, title, finalMateriaId);
+      const id = await startIngest(url, title.trim(), finalMateriaId);
       setJobId(id);
       setPolling(true);
       setStatus({ status: "pending", message: "Iniciando...", progress: 0 });
@@ -248,18 +250,28 @@ export default function IngestPage() {
                     required
                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                   />
+                  {user && (
+                    <p className="text-xs text-gray-500 mt-1.5">
+                      Videos de hasta {user.max_video_minutes / 60 >= 1 && user.max_video_minutes % 60 === 0
+                        ? `${user.max_video_minutes / 60} h`
+                        : `${user.max_video_minutes} min`}
+                      {user.max_classes !== null &&
+                        ` · ${Math.min(classes.length, user.max_classes)} de ${user.max_classes} clases usadas`}
+                    </p>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-sm text-gray-400 mb-1.5">
-                    Titulo de la clase
+                    Titulo de la clase{" "}
+                    <span className="text-gray-600">(opcional)</span>
                   </label>
                   <input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Ej: Clase 5 - Integrales"
-                    required
+                    placeholder="Si lo dejas vacio, se usa el titulo del video"
+                    maxLength={200}
                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                   />
                 </div>
@@ -335,6 +347,13 @@ export default function IngestPage() {
                     );
                   })}
                 </div>
+
+                {/* Resolved title */}
+                {status?.title && (
+                  <p className="text-sm text-gray-300 text-center font-medium truncate" title={status.title}>
+                    {status.title}
+                  </p>
+                )}
 
                 {/* Status message */}
                 {status?.message && (

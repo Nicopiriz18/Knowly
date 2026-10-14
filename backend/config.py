@@ -66,9 +66,9 @@ class Settings(BaseSettings):
     ingest_limit_per_day: int = 3
 
     # Ingest quotas (admins are exempt from the per-user ones)
-    max_classes_per_user: int = 5
+    max_classes_per_user: int = 10
     max_active_ingests_per_user: int = 1
-    max_video_minutes: int = 180
+    max_video_minutes: int = 240
     # Ingests run one after another in this many worker threads; the rest wait in a queue
     ingest_workers: int = 1
 

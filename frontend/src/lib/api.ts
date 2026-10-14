@@ -33,11 +33,14 @@ export interface IngestStatus {
   status: "pending" | "downloading" | "transcribing" | "extracting_frames" | "analyzing_frames" | "embedding" | "done" | "error";
   message: string;
   progress: number;
+  title?: string;
 }
 
 export interface Me {
   email: string;
   is_admin: boolean;
+  max_classes: number | null;
+  max_video_minutes: number;
 }
 
 export type UserStatus = "pending" | "approved" | "rejected";

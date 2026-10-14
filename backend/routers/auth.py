@@ -44,4 +44,9 @@ def verify(request: Request, body: LoginVerifyRequest):
 
 @router.get("/me", response_model=MeResponse)
 def me(user: CurrentUser = Depends(get_current_user)):
-    return MeResponse(email=user.email, is_admin=user.is_admin)
+    return MeResponse(
+        email=user.email,
+        is_admin=user.is_admin,
+        max_classes=None if user.is_admin else settings.max_classes_per_user,
+        max_video_minutes=settings.max_video_minutes,
+    )
