@@ -162,6 +162,12 @@ docker compose -f docker-compose.prod.yml up -d --build
 docker image prune -f
 ```
 
+Si el cambio toca `deploy/Caddyfile`, recreá Caddy: el archivo está montado suelto y `git pull` lo reemplaza, así que un `caddy reload` seguiría leyendo la versión anterior.
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps caddy
+```
+
 ## Problemas comunes
 
 - **Caddy no obtiene certificado:** revisá que los registros A apunten a la IP (`dig +short api.knowly.duckdns.org`) y que los puertos 80/443 estén abiertos.
