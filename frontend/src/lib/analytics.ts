@@ -17,8 +17,8 @@ export function initAnalytics(): void {
     defaults: "2026-05-30",
     person_profiles: "identified_only",
     session_recording: {
-      // Inputs are masked by default; elements with the "ph-mask" class
-      // (chat messages, sources, emails) are masked too.
+      // Inputs stay masked (the login form has the email and the one-time code);
+      // sent chat messages are visible. Elements with the "ph-mask" class (emails) are masked.
       maskAllInputs: true,
     },
   });

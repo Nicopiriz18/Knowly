@@ -25,7 +25,7 @@ export default function ChatMessage({ role, content, sources, isStreaming }: Cha
     return (
       <div className="flex justify-end mb-5">
         <div className="max-w-[85%] md:max-w-[70%]">
-          <div className="ph-mask px-4 py-2.5 rounded-2xl rounded-br-sm bg-indigo-600 text-white text-sm leading-relaxed whitespace-pre-wrap break-words">
+          <div className="px-4 py-2.5 rounded-2xl rounded-br-sm bg-indigo-600 text-white text-sm leading-relaxed whitespace-pre-wrap break-words">
             {content}
           </div>
         </div>
@@ -43,7 +43,7 @@ export default function ChatMessage({ role, content, sources, isStreaming }: Cha
 
         {/* Content */}
         <div className="min-w-0 flex-1">
-          <div className="ph-mask prose-chat text-sm text-gray-200 leading-relaxed break-words">
+          <div className="prose-chat text-sm text-gray-200 leading-relaxed break-words">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -129,7 +129,7 @@ export default function ChatMessage({ role, content, sources, isStreaming }: Cha
 
           {/* Sources */}
           {sources && sources.length > 0 && !isStreaming && (
-            <div className="ph-mask mt-4 sources-appear">
+            <div className="mt-4 sources-appear">
               <p className="text-xs text-gray-500 font-medium mb-2">Fuentes</p>
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {sources.map((source, idx) => (

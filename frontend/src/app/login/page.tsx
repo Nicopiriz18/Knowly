@@ -107,6 +107,9 @@ export default function LoginPage() {
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
                 Continuar
               </button>
+              <p className="text-xs text-gray-600 text-center">
+                Registramos el uso de la app, incluidas las preguntas al chat, para mejorarla.
+              </p>
             </form>
           )}
 
