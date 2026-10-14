@@ -155,6 +155,13 @@ export function getClasses(materiaId?: string): Promise<ClassInfo[]> {
   return apiJson(`/classes${params}`);
 }
 
+export function renameClass(classId: string, classTitle: string): Promise<ClassInfo> {
+  return apiJson(`/classes/${classId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ class_title: classTitle }),
+  });
+}
+
 export async function deleteClass(classId: string): Promise<void> {
   await apiFetch(`/classes/${classId}`, { method: "DELETE" });
 }
@@ -163,10 +170,11 @@ export async function deleteClass(classId: string): Promise<void> {
 // Ingest
 // ---------------------------------------------------------------------------
 
-export async function startIngest(url: string, title: string, materiaId: string): Promise<string> {
+// The class takes the video's title; it can be renamed afterwards with renameClass.
+export async function startIngest(url: string, materiaId: string): Promise<string> {
   const data = await apiJson<{ job_id: string }>("/ingest", {
     method: "POST",
-    body: JSON.stringify({ url, title, materia_id: materiaId }),
+    body: JSON.stringify({ url, materia_id: materiaId }),
   });
   return data.job_id;
 }

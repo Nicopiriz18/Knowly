@@ -67,6 +67,25 @@ def register_class(
     _save(data)
 
 
+def rename_class(class_id: str, owner: str, class_title: str) -> dict | None:
+    """Change a class title. Returns the updated class, or None if it isn't the owner's."""
+    data = _load()
+    if class_id not in data or _owner(data[class_id]) != owner:
+        return None
+    data[class_id]["class_title"] = class_title
+    _save(data)
+    return {"class_id": class_id, **data[class_id]}
+
+
+def class_titles() -> dict[str, str]:
+    """Current title of every class, by class_id.
+
+    Pinecone chunks keep the title they were ingested with; this is the source of
+    truth after a rename.
+    """
+    return {cid: info["class_title"] for cid, info in _load().items()}
+
+
 def delete_class(class_id: str, owner: str) -> bool:
     """Remove a class from the registry. Returns True if it existed and belonged to owner."""
     data = _load()

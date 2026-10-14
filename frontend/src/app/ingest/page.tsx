@@ -52,7 +52,6 @@ export default function IngestPage() {
 
   // Form
   const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
   const [materiaId, setMateriaId] = useState("");
   const [showNewMateria, setShowNewMateria] = useState(false);
   const [newMateriaTitle, setNewMateriaTitle] = useState("");
@@ -62,6 +61,7 @@ export default function IngestPage() {
   const [status, setStatus] = useState<IngestStatus | null>(null);
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -105,6 +105,7 @@ export default function IngestPage() {
 
     setError(null);
     setStatus(null);
+    setSubmitting(true);
 
     try {
       let finalMateriaId = materiaId;
@@ -125,7 +126,7 @@ export default function IngestPage() {
         return;
       }
 
-      const id = await startIngest(url, title.trim(), finalMateriaId);
+      const id = await startIngest(url, finalMateriaId);
       setJobId(id);
       setPolling(true);
       setStatus({ status: "pending", message: "Iniciando...", progress: 0 });
@@ -135,6 +136,8 @@ export default function IngestPage() {
           ? err.message
           : "Error al iniciar la indexacion. Verifica que el backend este corriendo."
       );
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -243,37 +246,20 @@ export default function IngestPage() {
                     URL de YouTube
                   </label>
                   <input
-                    type="url"
+                    type="text"
+                    inputMode="url"
+                    autoComplete="off"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="https://www.youtube.com/watch?v=..."
                     required
                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                   />
-                  {user && (
+                  {user && user.max_classes !== null && (
                     <p className="text-xs text-gray-500 mt-1.5">
-                      Videos de hasta {user.max_video_minutes / 60 >= 1 && user.max_video_minutes % 60 === 0
-                        ? `${user.max_video_minutes / 60} h`
-                        : `${user.max_video_minutes} min`}
-                      {user.max_classes !== null &&
-                        ` · ${Math.min(classes.length, user.max_classes)} de ${user.max_classes} clases usadas`}
+                      {Math.min(classes.length, user.max_classes)} de {user.max_classes} clases usadas
                     </p>
                   )}
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1.5">
-                    Titulo de la clase{" "}
-                    <span className="text-gray-600">(opcional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Si lo dejas vacio, se usa el titulo del video"
-                    maxLength={200}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-                  />
                 </div>
 
                 {error && (
@@ -285,9 +271,16 @@ export default function IngestPage() {
 
                 <button
                   type="submit"
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 rounded-xl transition-colors"
+                  disabled={submitting}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:hover:bg-indigo-600 text-white text-sm font-medium py-2.5 rounded-xl transition-colors inline-flex items-center justify-center gap-2"
                 >
-                  Indexar clase
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Verificando video...
+                    </>
+                  ) : (
+                    "Indexar clase"
+                  )}
                 </button>
               </form>
             ) : (

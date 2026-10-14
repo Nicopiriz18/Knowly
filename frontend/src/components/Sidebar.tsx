@@ -1,6 +1,6 @@
 "use client";
 
-import { ClassInfo, MateriaInfo, deleteClass, deleteMateria, createMateria } from "@/lib/api";
+import { ClassInfo, MateriaInfo, deleteClass, deleteMateria, createMateria, renameClass } from "@/lib/api";
 import {
   GraduationCap,
   Plus,
@@ -10,10 +10,11 @@ import {
   FolderOpen,
   X,
   LogOut,
+  Pencil,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 
 interface SidebarProps {
@@ -44,6 +45,10 @@ export default function Sidebar({
   const [showNewMateria, setShowNewMateria] = useState(false);
   const [newMateriaTitle, setNewMateriaTitle] = useState("");
   const [creatingMateria, setCreatingMateria] = useState(false);
+  const [editingClass, setEditingClass] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  // Set on Escape so the blur that follows doesn't save
+  const renameCancelled = useRef(false);
 
   const toggleExpand = (materiaId: string) => {
     setExpanded((prev) => {
@@ -67,6 +72,25 @@ export default function Sidebar({
       onRefresh();
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const startRename = (e: React.MouseEvent, cls: ClassInfo) => {
+    e.stopPropagation();
+    renameCancelled.current = false;
+    setEditingClass(cls.class_id);
+    setEditTitle(cls.class_title);
+  };
+
+  const saveRename = async (cls: ClassInfo) => {
+    const title = editTitle.trim();
+    setEditingClass(null);
+    if (renameCancelled.current || !title || title === cls.class_title) return;
+    try {
+      await renameClass(cls.class_id, title);
+      onRefresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "No se pudo renombrar la clase.");
     }
   };
 
@@ -151,53 +175,6 @@ export default function Sidebar({
           <span className="text-sm font-medium truncate">Todas las materias</span>
         </button>
 
-        {/* Add materia */}
-        {showNewMateria ? (
-          <div className="px-3 py-2">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={newMateriaTitle}
-                onChange={(e) => setNewMateriaTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreateMateria();
-                  if (e.key === "Escape") {
-                    setShowNewMateria(false);
-                    setNewMateriaTitle("");
-                  }
-                }}
-                placeholder="Nombre de la materia..."
-                autoFocus
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors min-w-0"
-              />
-              <button
-                onClick={handleCreateMateria}
-                disabled={creatingMateria || !newMateriaTitle.trim()}
-                className="p-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-lg transition-colors shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => {
-                  setShowNewMateria(false);
-                  setNewMateriaTitle("");
-                }}
-                className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors shrink-0"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowNewMateria(true)}
-            className="w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 text-gray-500 hover:bg-gray-800 hover:text-gray-300 border border-dashed border-gray-700 transition-colors"
-          >
-            <Plus className="w-4 h-4 shrink-0" />
-            <span className="text-sm font-medium">Agregar materia</span>
-          </button>
-        )}
-
         {/* Materias */}
         {materias.map((mat) => {
           const isExpanded = expanded.has(mat.materia_id);
@@ -255,7 +232,28 @@ export default function Sidebar({
                       Sin clases
                     </p>
                   ) : (
-                    matClasses.map((cls) => (
+                    matClasses.map((cls) =>
+                      editingClass === cls.class_id ? (
+                        <div key={cls.class_id} className="px-1 py-1">
+                          <input
+                            type="text"
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              // Enter saves through onBlur, so the rename runs once
+                              if (e.key === "Enter") e.currentTarget.blur();
+                              if (e.key === "Escape") {
+                                renameCancelled.current = true;
+                                setEditingClass(null);
+                              }
+                            }}
+                            onBlur={() => saveRename(cls)}
+                            maxLength={200}
+                            autoFocus
+                            className="w-full bg-gray-800 border border-indigo-500 rounded-lg px-2.5 py-1.5 text-base md:text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      ) : (
                       <button
                         key={cls.class_id}
                         onClick={() =>
@@ -271,9 +269,13 @@ export default function Sidebar({
                         <span className="text-xs font-medium truncate flex-1">
                           {cls.class_title}
                         </span>
-                        <span className="text-[10px] bg-gray-800 text-gray-600 px-1 py-0.5 rounded shrink-0">
-                          {cls.chunk_count}
-                        </span>
+                        <button
+                          onClick={(e) => startRename(e, cls)}
+                          className="p-1 -m-1 md:opacity-0 md:group-hover:opacity-100 text-gray-500 hover:text-indigo-400 transition-all shrink-0"
+                          title="Renombrar clase"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
                         <button
                           onClick={(e) => handleDeleteClass(e, cls.class_id)}
                           disabled={deleting === cls.class_id}
@@ -283,13 +285,61 @@ export default function Sidebar({
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </button>
-                    ))
+                      )
+                    )
                   )}
                 </div>
               )}
             </div>
           );
         })}
+
+        {/* Add materia */}
+        {showNewMateria ? (
+          <div className="px-3 py-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newMateriaTitle}
+                onChange={(e) => setNewMateriaTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateMateria();
+                  if (e.key === "Escape") {
+                    setShowNewMateria(false);
+                    setNewMateriaTitle("");
+                  }
+                }}
+                placeholder="Nombre de la materia..."
+                autoFocus
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-base md:text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors min-w-0"
+              />
+              <button
+                onClick={handleCreateMateria}
+                disabled={creatingMateria || !newMateriaTitle.trim()}
+                className="p-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-lg transition-colors shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => {
+                  setShowNewMateria(false);
+                  setNewMateriaTitle("");
+                }}
+                className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowNewMateria(true)}
+            className="w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 text-gray-500 hover:bg-gray-800 hover:text-gray-300 border border-dashed border-gray-700 transition-colors"
+          >
+            <Plus className="w-4 h-4 shrink-0" />
+            <span className="text-sm font-medium">Agregar materia</span>
+          </button>
+        )}
       </nav>
 
       {/* Bottom action */}

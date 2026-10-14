@@ -13,7 +13,7 @@ from langgraph.graph import END, StateGraph
 from config import settings
 from schemas import Source
 from services.pinecone_client import get_index
-from services.class_service import list_classes
+from services.class_service import class_titles, list_classes
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -187,6 +187,14 @@ def _cap_context(docs: list[Document], max_chars: int | None = None) -> list[Doc
     return capped
 
 
+def _apply_current_titles(docs: list[Document]) -> list[Document]:
+    """Replace the title stored in each chunk with the class's current one (it may have been renamed)."""
+    titles = class_titles()
+    for doc in docs:
+        doc.metadata["class_title"] = titles.get(doc.metadata.get("class_id"), doc.metadata["class_title"])
+    return docs
+
+
 def _docs_to_sources(docs: list[Document]) -> list[Source]:
     """Convert LangChain Documents to Source schema objects."""
     return [
@@ -303,6 +311,7 @@ def generate(state: RAGState) -> dict:
             "sources": [],
         }
 
+    docs = _apply_current_titles(docs)
     context = _build_context(docs)
     sources = _docs_to_sources(docs)
 
@@ -449,6 +458,7 @@ async def query_rag_stream(
         docs = graded["documents"]
 
     # Step 4: Build context and stream the LLM response
+    docs = _apply_current_titles(docs)
     context = _build_context(docs)
     sources = _docs_to_sources(docs)
 

@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from config import settings
 from deps import CurrentUser, get_current_user
-from schemas import ClassInfo
-from services.class_service import list_classes as get_all_classes, delete_class as remove_class_registry
+from schemas import ClassInfo, ClassRenameRequest
+from services.class_service import list_classes as get_all_classes, delete_class as remove_class_registry, rename_class
 from services.pinecone_client import get_index
 
 router = APIRouter()
@@ -27,6 +27,21 @@ def list_classes(materia_id: str | None = None, user: CurrentUser = Depends(get_
         )
         for c in classes
     ]
+
+
+@router.patch("/{class_id}", response_model=ClassInfo)
+def update_class(class_id: str, body: ClassRenameRequest, user: CurrentUser = Depends(get_current_user)):
+    """Rename a class."""
+    c = rename_class(class_id, user.email, body.class_title)
+    if c is None:
+        raise HTTPException(status_code=404, detail=f"Class '{class_id}' not found.")
+    return ClassInfo(
+        class_id=c["class_id"],
+        class_title=c["class_title"],
+        source_url=c["source_url"],
+        chunk_count=c.get("chunk_count", 0),
+        materia_id=c.get("materia_id", ""),
+    )
 
 
 @router.delete("/{class_id}")

@@ -1,5 +1,6 @@
+import re
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -71,11 +72,68 @@ class ClassInfo(BaseModel):
     materia_id: str
 
 
+class ClassRenameRequest(BaseModel):
+    class_title: str = Field(min_length=1, max_length=200)
+
+    @field_validator("class_title", mode="before")
+    @classmethod
+    def _strip(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+
 # ---------------------------------------------------------------------------
 # Ingest
 # ---------------------------------------------------------------------------
 
 _YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
+_YOUTUBE_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_YOUTUBE_EXAMPLE = "https://www.youtube.com/watch?v=..."
+
+
+def youtube_url_error(raw: str) -> str | None:
+    """Explain why `raw` is not a usable YouTube video link, or None if it is.
+
+    Distinguishes "not a link at all", "another site", "a YouTube page that isn't
+    a video" (channel, playlist, search) and "a truncated video ID", so the user
+    knows what to fix instead of getting a generic rejection.
+    """
+    if not raw:
+        return f"Pegá el link del video. Por ejemplo: {_YOUTUBE_EXAMPLE}"
+    if " " in raw or "\n" in raw:
+        return "El link tiene espacios o saltos de línea. Pegá solo la URL del video."
+
+    parsed = urlparse(raw if "://" in raw else f"https://{raw}")
+    host = (parsed.hostname or "").lower()
+    if not host or "." not in host:
+        return f"Eso no parece un link. Pegá la URL completa del video, por ejemplo: {_YOUTUBE_EXAMPLE}"
+    if parsed.scheme not in ("http", "https"):
+        return "El link tiene que empezar con http:// o https://."
+    if host not in _YOUTUBE_HOSTS:
+        return f"Por ahora solo se aceptan videos de YouTube, y el link que pegaste es de {host}."
+
+    path = parsed.path.rstrip("/")
+    query = parse_qs(parsed.query)
+    video_id: str | None = None
+    if host == "youtu.be":
+        video_id = path.lstrip("/").split("/")[0] or None
+    elif path == "/watch":
+        video_id = (query.get("v") or [None])[0]
+    elif path.startswith(("/shorts/", "/live/", "/embed/", "/v/")):
+        video_id = path.split("/")[2] if path.count("/") >= 2 else None
+    elif path == "/playlist" or (not path and "list" in query):
+        return "Ese link es de una playlist. Abrí el video que querés y pegá el link de ese video."
+    elif path.startswith(("/@", "/channel/", "/c/", "/user/")):
+        return "Ese link es de un canal, no de un video. Entrá al video y pegá su link."
+    elif path == "/results":
+        return "Ese link es de una búsqueda de YouTube, no de un video."
+    elif not path:
+        return f"Ese link es la página principal de YouTube. Pegá el link de un video, por ejemplo: {_YOUTUBE_EXAMPLE}"
+
+    if not video_id:
+        return f"El link es de YouTube pero no apunta a un video. Tiene que verse como {_YOUTUBE_EXAMPLE}"
+    if not _YOUTUBE_ID.match(video_id):
+        return "El link parece incompleto: el identificador del video no es válido. Copialo de nuevo desde YouTube."
+    return None
 
 
 class IngestRequest(BaseModel):
@@ -93,10 +151,11 @@ class IngestRequest(BaseModel):
     @classmethod
     def _youtube_only(cls, v: str) -> str:
         v = v.strip()
-        parsed = urlparse(v)
-        if parsed.scheme not in ("http", "https") or (parsed.hostname or "").lower() not in _YOUTUBE_HOSTS:
-            raise ValueError("La URL debe ser un video de YouTube.")
-        return v
+        error = youtube_url_error(v)
+        if error:
+            raise ValueError(error)
+        # Accept links pasted without scheme ("www.youtube.com/watch?v=...")
+        return v if "://" in v else f"https://{v}"
 
 
 class IngestResponse(BaseModel):

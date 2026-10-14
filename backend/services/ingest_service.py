@@ -3,6 +3,7 @@
 import base64
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -72,15 +73,44 @@ def _run_ytdlp(*args: str) -> str:
         cmd += ["--cookies", settings.ytdlp_cookies_file]
     result = subprocess.run([*cmd, *args], capture_output=True, text=True)
     if result.returncode != 0:
-        stderr = result.stderr
-        if "not a bot" in stderr or "Sign in to confirm" in stderr:
-            raise RuntimeError(
-                "YouTube bloqueó la descarga desde el servidor (pide iniciar sesión). "
-                "Hay que cargar o renovar las cookies de YouTube."
-            )
-        errors = [line for line in stderr.splitlines() if line.startswith("ERROR:")]
-        raise RuntimeError(errors[-1] if errors else f"yt-dlp falló (código {result.returncode}).")
+        raise RuntimeError(_describe_ytdlp_error(result.stderr, result.returncode))
     return result.stdout
+
+
+# (substring of yt-dlp's stderr, message for the user). Order matters: first match wins.
+_YTDLP_ERRORS: list[tuple[str, str]] = [
+    ("not a bot", "YouTube bloqueó la descarga desde el servidor (pide iniciar sesión). "
+                  "Hay que cargar o renovar las cookies de YouTube."),
+    ("Sign in to confirm", "YouTube bloqueó la descarga desde el servidor (pide iniciar sesión). "
+                           "Hay que cargar o renovar las cookies de YouTube."),
+    ("Private video", "El video es privado. Pedile al dueño que lo ponga como público o \"no listado\"."),
+    ("Members-only", "El video es solo para miembros del canal y no se puede descargar."),
+    ("age-restricted", "El video tiene restricción de edad y no se puede descargar desde el servidor."),
+    ("Age-restricted", "El video tiene restricción de edad y no se puede descargar desde el servidor."),
+    ("has been removed", "El video fue eliminado de YouTube."),
+    ("Video unavailable", "El video no existe, fue eliminado o no está disponible. Revisá el link."),
+    ("not available in your country", "El video no está disponible en el país donde corre el servidor."),
+    ("Incomplete YouTube ID", "El link está incompleto: el identificador del video quedó cortado. Copialo de nuevo."),
+    ("Unsupported URL", "Ese link no apunta a un video que se pueda descargar."),
+    ("is not a valid URL", "El link no es una URL válida."),
+    ("Requested format is not available", "El video no tiene un formato descargable (puede ser una transmisión o un video sin audio)."),
+    ("Unable to download", "No se pudo conectar con YouTube para descargar el video. Probá de nuevo en unos minutos."),
+    ("HTTP Error 429", "YouTube limitó temporalmente las descargas del servidor. Probá de nuevo en unos minutos."),
+]
+
+
+def _describe_ytdlp_error(stderr: str, returncode: int) -> str:
+    """Translate yt-dlp's stderr into one readable sentence for the UI."""
+    for needle, message in _YTDLP_ERRORS:
+        if needle in stderr:
+            return message
+    errors = [line for line in stderr.splitlines() if line.startswith("ERROR:")]
+    if errors:
+        # Strip yt-dlp's "ERROR: [youtube] abc123: " prefix, keep the explanation
+        last = errors[-1]
+        last = re.sub(r"^ERROR:\s*(\[[^\]]+\]\s*)?([A-Za-z0-9_-]{11}:\s*)?", "", last)
+        return f"No se pudo descargar el video: {last}"
+    return f"No se pudo descargar el video (yt-dlp terminó con código {returncode})."
 
 
 def _find_ffmpeg() -> str:
